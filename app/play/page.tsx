@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { joinGame, useGameSync, submitBuzzer } from '@/lib/useGameSync'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Zap, Trophy, Clock } from 'lucide-react'
 
-export default function PlayerInterface() {
+function PlayerInterfaceContent() {
     const searchParams = useSearchParams()
     const urlPin = searchParams.get('pin')
 
@@ -264,4 +264,12 @@ export default function PlayerInterface() {
     }
 
     return null
+}
+
+export default function PlayerInterface() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-obsidian flex items-center justify-center text-white">Loading...</div>}>
+            <PlayerInterfaceContent />
+        </Suspense>
+    )
 }
