@@ -44,7 +44,7 @@ export default function QuizSelector() {
         setCreating(true)
         try {
             const { gameId, pin } = await createGame(quizId)
-            router.push(`/host/${gameId}?pin=${pin}`)
+            router.push(`/host?id=${gameId}&pin=${pin}`)
         } catch (error) {
             console.error('Error creating game:', error)
             alert('Failed to create game')
@@ -88,8 +88,8 @@ export default function QuizSelector() {
                             key={cat}
                             onClick={() => setSelectedCategory(cat)}
                             className={`px-6 py-2 rounded-full font-medium transition-all ${selectedCategory === cat
-                                    ? 'bg-electric-purple text-white shadow-glow-purple'
-                                    : 'bg-white/10 text-white/60 hover:bg-white/20'
+                                ? 'bg-electric-purple text-white shadow-glow-purple'
+                                : 'bg-white/10 text-white/60 hover:bg-white/20'
                                 }`}
                         >
                             {cat === 'all' ? 'All Categories' : cat}
