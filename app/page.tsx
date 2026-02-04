@@ -69,7 +69,7 @@ export default function Home() {
           transition={{ delay: 0.6, duration: 0.8 }}
           className="flex flex-col md:flex-row gap-6 justify-center"
         >
-          <Link href="/host" className="group">
+          <Link href="/select" className="group">
             <div className="px-10 py-5 rounded-2xl bg-white text-obsidian font-bold text-xl flex items-center justify-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(255,255,255,0.2)]">
               <Zap className="w-6 h-6 fill-obsidian" />
               Host a Game

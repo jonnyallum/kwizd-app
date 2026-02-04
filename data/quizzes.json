@@ -1,1 +1,50 @@
-[]
+[
+  {
+    "title": "General Knowledge - Pack 1",
+    "category": "General Knowledge",
+    "questions": [
+      {
+        "id": "1",
+        "text": "Which planet is known as the Red Planet?",
+        "type": "multiple_choice",
+        "options": ["Mars", "Venus", "Jupiter", "Saturn"],
+        "answer": "Mars",
+        "fact": "Mars has the largest volcano in the solar system, Olympus Mons.",
+        "difficulty": "easy"
+      },
+      {
+        "id": "2",
+        "text": "What is the capital of France?",
+        "type": "multiple_choice",
+        "options": ["London", "Berlin", "Paris", "Madrid"],
+        "answer": "Paris",
+        "fact": "Paris is known as the 'City of Light'.",
+        "difficulty": "easy"
+      },
+      {
+        "id": "3",
+        "text": "In which year did the Titanic sink?",
+        "type": "multiple_choice",
+        "options": ["1910", "1912", "1914", "1916"],
+        "answer": "1912",
+        "fact": "The Titanic was operated by the White Star Line.",
+        "difficulty": "medium"
+      }
+    ]
+  },
+  {
+    "title": "Music - 80s Classics",
+    "category": "Music",
+    "questions": [
+      {
+        "id": "4",
+        "text": "Who sang 'Thriller'?",
+        "type": "multiple_choice",
+        "options": ["Prince", "Michael Jackson", "Madonna", "David Bowie"],
+        "answer": "Michael Jackson",
+        "fact": "Thriller remains the best-selling album of all time.",
+        "difficulty": "easy"
+      }
+    ]
+  }
+]
