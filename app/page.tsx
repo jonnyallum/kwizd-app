@@ -106,9 +106,27 @@ export default function Home() {
         </motion.div>
       </div>
 
-      {/* Footer Branding */}
-      <div className="absolute bottom-8 left-0 right-0 text-center opacity-20 hover:opacity-100 transition-opacity">
-        <p className="text-xs tracking-[0.5em] text-white uppercase">Kwizz.co.uk &copy; 2026</p>
+      {/* Navigation Footer / Neural Registry */}
+      <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-4">
+        <div className="flex flex-col items-center opacity-20 hover:opacity-100 transition-opacity duration-500">
+          <p className="text-[10px] tracking-[0.4em] text-white uppercase mb-2">Kwizz.co.uk // Neural Node_03</p>
+          <div className="flex gap-4 text-[9px] font-black text-white/40 uppercase tracking-tighter">
+            <span className="hover:text-neon-cyan transition-colors cursor-default">@Conductor</span>
+            <span className="hover:text-neon-cyan transition-colors cursor-default">@JonnyAI</span>
+            <span className="hover:text-neon-cyan transition-colors cursor-default">@Pixel</span>
+            <span className="hover:text-neon-cyan transition-colors cursor-default">@Sentinel</span>
+            <span className="hover:text-neon-cyan transition-colors cursor-default">@Watcher</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center group cursor-pointer">
+          <span className="text-[8px] font-black text-white/20 tracking-[0.5em] uppercase mb-1">Built By</span>
+          <div className="flex items-center gap-1">
+            <span className="text-sm font-black text-white tracking-tighter uppercase group-hover:text-neon-cyan transition-colors">Jonny</span>
+            <span className="text-sm font-black text-neon-cyan tracking-tighter uppercase group-hover:text-white transition-colors">Ai</span>
+          </div>
+          <div className="w-8 h-[1px] bg-gradient-to-r from-transparent via-neon-cyan/50 to-transparent mt-1" />
+        </div>
       </div>
     </main>
   )
