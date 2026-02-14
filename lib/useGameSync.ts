@@ -33,12 +33,15 @@ export interface Response {
     created_at: string
 }
 
+export type ConnectionStatus = 'connecting' | 'connected' | 'error' | 'reconnecting'
+
 export function useGameSync(gameId: string | null) {
     const [game, setGame] = useState<Game | null>(null)
     const [players, setPlayers] = useState<Player[]>([])
     const [responses, setResponses] = useState<Response[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting')
 
     useEffect(() => {
         if (!gameId) {
@@ -47,9 +50,13 @@ export function useGameSync(gameId: string | null) {
         }
 
         let channel: RealtimeChannel
+        let retryCount = 0
+        const maxRetries = 3
 
         const setupRealtimeSubscription = async () => {
             try {
+                if (retryCount > 0) setConnectionStatus('reconnecting')
+
                 const { data: gameData, error: gameError } = await supabase
                     .from('games')
                     .select('*')
@@ -105,20 +112,36 @@ export function useGameSync(gameId: string | null) {
                             setResponses((prev) => [...prev, payload.new as Response])
                         }
                     )
-                    .subscribe()
+                    .subscribe((status) => {
+                        if (status === 'SUBSCRIBED') {
+                            setConnectionStatus('connected')
+                        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+                            setConnectionStatus('error')
+                        }
+                    })
 
                 setLoading(false)
+                setConnectionStatus('connected')
             } catch (err) {
-                setError(err instanceof Error ? err.message : 'Failed to load game')
-                setLoading(false)
+                console.error(`[Kwizz] Sync error (Attempt ${retryCount + 1}/${maxRetries}):`, err)
+
+                if (retryCount < maxRetries) {
+                    retryCount++
+                    const delay = Math.pow(2, retryCount) * 1000 // Exponential backoff
+                    setTimeout(setupRealtimeSubscription, delay)
+                } else {
+                    setError(err instanceof Error ? err.message : 'Failed to load game')
+                    setLoading(false)
+                    setConnectionStatus('error')
+                }
             }
         }
 
         setupRealtimeSubscription()
 
-        // Polling fallback every 2s
+        // Polling fallback every 2s - Only active if we aren't connected via Realtime
         const pollInterval = setInterval(async () => {
-            if (!gameId) return
+            if (!gameId || connectionStatus === 'connected') return
             try {
                 const { data: gameData } = await supabase
                     .from('games').select('*').eq('id', gameId).single()
@@ -149,28 +172,111 @@ export function useGameSync(gameId: string | null) {
             } catch {
                 // Silent fail on poll
             }
-        }, 2000)
+        }, 3000)
 
         return () => {
             clearInterval(pollInterval)
             if (channel) supabase.removeChannel(channel)
         }
-    }, [gameId])
+    }, [gameId, connectionStatus])
 
-    return { game, setGame, players, setPlayers, responses, setResponses, loading, error }
+    return { game, setGame, players, setPlayers, responses, setResponses, loading, error, connectionStatus }
 }
 
-export async function createGame(quizId: string): Promise<{ gameId: string; pin: string }> {
+export async function createGame(quizId: string, hostId: string): Promise<{ gameId: string; pin: string }> {
+    // 1. Verify credits before creation
+    const { hasCredits, error: creditError } = await checkHostCredits(hostId)
+    if (creditError) throw new Error(creditError)
+    if (!hasCredits) throw new Error('Insufficient credits to host a game.')
+
     const pin = Math.floor(1000 + Math.random() * 9000).toString()
 
     const { data, error } = await supabase
         .from('games')
-        .insert({ quiz_id: quizId, pin, status: 'lobby' })
+        .insert({
+            quiz_id: quizId,
+            pin,
+            status: 'lobby',
+            host_id: hostId
+        })
         .select()
         .single()
 
     if (error) throw error
+
+    // 2. Deduct credit immediately on game creation (reservation)
+    const { error: deductError } = await deductHostCredit(hostId)
+    if (deductError) {
+        // Rollback game creation if deduction fails (safety first)
+        await supabase.from('games').delete().eq('id', data.id)
+        throw new Error('Transaction failed: Could not deduct credit.')
+    }
+
     return { gameId: data.id, pin: data.pin }
+}
+
+export async function checkHostCredits(hostId: string): Promise<{ hasCredits: boolean; credits: number; error?: string }> {
+    try {
+        const { data: host, error: hostError } = await supabase
+            .from('hosts')
+            .select('free_credits_remaining')
+            .eq('id', hostId)
+            .single()
+
+        if (hostError) return { hasCredits: false, credits: 0, error: 'Host not found' }
+
+        const { data: credits, error: creditsError } = await supabase
+            .from('host_credits')
+            .select('credits_remaining')
+            .eq('host_id', hostId)
+
+        const totalCredits = (host.free_credits_remaining || 0) +
+            (credits?.reduce((acc, c) => acc + c.credits_remaining, 0) || 0)
+
+        return { hasCredits: totalCredits > 0, credits: totalCredits }
+    } catch (err) {
+        return { hasCredits: false, credits: 0, error: 'Failed to verify credits' }
+    }
+}
+
+async function deductHostCredit(hostId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        // 1. Try free credits first
+        const { data: host } = await supabase
+            .from('hosts')
+            .select('free_credits_remaining')
+            .eq('id', hostId)
+            .single()
+
+        if (host && host.free_credits_remaining > 0) {
+            const { error } = await supabase
+                .from('hosts')
+                .update({ free_credits_remaining: host.free_credits_remaining - 1 })
+                .eq('id', hostId)
+            if (!error) return { success: true }
+        }
+
+        // 2. Try paid credits
+        const { data: paidCredits } = await supabase
+            .from('host_credits')
+            .select('id, credits_remaining')
+            .eq('host_id', hostId)
+            .gt('credits_remaining', 0)
+            .order('created_at', { ascending: true })
+            .limit(1)
+
+        if (paidCredits && paidCredits.length > 0) {
+            const { error } = await supabase
+                .from('host_credits')
+                .update({ credits_remaining: paidCredits[0].credits_remaining - 1 })
+                .eq('id', paidCredits[0].id)
+            if (!error) return { success: true }
+        }
+
+        return { success: false, error: 'No credits available' }
+    } catch (err) {
+        return { success: false, error: 'Deduction failed' }
+    }
 }
 
 export async function joinGame(pin: string, teamName: string): Promise<{ gameId: string; playerId: string }> {

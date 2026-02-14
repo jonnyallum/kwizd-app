@@ -72,9 +72,9 @@ function HostDashboardContent() {
             console.log('[Kwizz] Starting game...', gameId, 'with', questions.length, 'questions')
 
             // Optimistically update local state FIRST so UI transitions immediately
-            setGame(prev => prev ? { ...prev, status: 'active' as const, current_question_id: questions[0].id } : prev)
+            setGame(prev => prev ? { ...prev, status: 'active' as const, current_question_id: questions[0].id, question_started_at: new Date().toISOString() } : prev)
             setCurrentQuestionIndex(0)
-            setCountdown(10)
+            setCountdown(20)
 
             // Then persist to DB (fire and forget with error handling)
             await updateGameStatus(gameId, 'active')
@@ -91,11 +91,12 @@ function HostDashboardContent() {
     async function nextQuestion() {
         const nextIndex = currentQuestionIndex + 1
         if (nextIndex < questions.length && gameId) {
+            console.log('[Kwizz] Advancing to question:', nextIndex + 1)
             // Optimistic update
             setCurrentQuestionIndex(nextIndex)
-            setGame(prev => prev ? { ...prev, current_question_id: questions[nextIndex].id } : prev)
+            setGame(prev => prev ? { ...prev, current_question_id: questions[nextIndex].id, question_started_at: new Date().toISOString() } : prev)
             setShowingAnswer(false)
-            setCountdown(10)
+            setCountdown(20) // Reset to 20 for gameplay
 
             try {
                 await setCurrentQuestion(gameId, questions[nextIndex].id)
@@ -103,6 +104,7 @@ function HostDashboardContent() {
                 console.error('[Kwizz] Error advancing question:', err)
             }
         } else if (gameId) {
+            console.log('[Kwizz] Finishing game...')
             // Optimistic update to finished
             setGame(prev => prev ? { ...prev, status: 'finished' as const } : prev)
 
@@ -111,8 +113,18 @@ function HostDashboardContent() {
             } catch (err) {
                 console.error('[Kwizz] Error finishing game:', err)
             }
+        } else {
+            console.warn('[Kwizz] Cannot advance: nextIndex out of bounds or no gameId', { nextIndex, length: questions.length, gameId })
         }
     }
+
+    // Auto-reveal answer when countdown hits zero
+    useEffect(() => {
+        if (game?.status === 'active' && countdown === 0 && !showingAnswer) {
+            console.log('[Kwizz] Countdown reached zero, showing answer...')
+            setShowingAnswer(true)
+        }
+    }, [countdown, game?.status, showingAnswer])
 
     useEffect(() => {
         if (game?.status === 'active' && countdown > 0 && !showingAnswer) {
@@ -326,26 +338,65 @@ function HostDashboardContent() {
     // Finished View
     if (game?.status === 'finished') {
         const sortedPlayers = [...players].sort((a, b) => b.score - a.score)
+        const podiumColors = ['border-yellow-400/50 shadow-yellow-400/20', 'border-gray-300/50 shadow-gray-300/20', 'border-orange-400/50 shadow-orange-400/20']
+        const podiumText = ['text-yellow-400', 'text-gray-300', 'text-orange-400']
 
         return (
-            <div className="min-h-screen bg-gradient-to-br from-obsidian via-obsidian-light to-obsidian p-8">
-                <div className="max-w-4xl mx-auto text-center">
-                    <h1 className="text-6xl font-bold text-white mb-12">Final Leaderboard</h1>
+            <div className="min-h-screen bg-obsidian p-8 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,rgba(157,29,242,0.1)_0%,transparent_70%)]" />
+
+                <div className="max-w-4xl mx-auto text-center relative z-10">
+                    <motion.div
+                        initial={{ y: -50, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        className="mb-16"
+                    >
+                        <Trophy className="w-24 h-24 text-yellow-500 mx-auto mb-6 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)]" />
+                        <h1 className="text-7xl font-black text-white uppercase italic tracking-tighter">
+                            Final <span className="text-gradient">Standings</span>
+                        </h1>
+                    </motion.div>
+
                     <div className="space-y-4">
-                        {sortedPlayers.map((player, idx) => (
-                            <div
-                                key={player.id}
-                                className={`glass-card p-8 flex items-center justify-between ${idx === 0 ? 'ring-4 ring-electric-purple' : ''
-                                    }`}
-                            >
-                                <div className="flex items-center gap-6">
-                                    <span className="text-4xl font-bold text-electric-purple">#{idx + 1}</span>
-                                    <span className="text-2xl font-bold text-white">{player.team_name}</span>
-                                </div>
-                                <span className="text-3xl font-bold text-neon-cyan">{player.score} pts</span>
-                            </div>
-                        ))}
+                        <AnimatePresence>
+                            {sortedPlayers.map((player, idx) => (
+                                <motion.div
+                                    key={player.id}
+                                    initial={{ x: idx % 2 === 0 ? -100 : 100, opacity: 0 }}
+                                    animate={{ x: 0, opacity: 1 }}
+                                    transition={{ delay: idx * 0.1, type: "spring", stiffness: 100 }}
+                                    className={`glass-card p-6 flex items-center justify-between border-2 transition-all duration-500 ${idx < 3 ? podiumColors[idx] : 'border-white/5 opacity-60'
+                                        }`}
+                                >
+                                    <div className="flex items-center gap-8">
+                                        <span className={`text-5xl font-black italic tracking-tighter ${idx < 3 ? podiumText[idx] : 'text-white/20'}`}>
+                                            #{idx + 1}
+                                        </span>
+                                        <div className="text-left">
+                                            <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em]">Neural Node</p>
+                                            <p className="text-3xl font-black text-white uppercase italic tracking-tight">{player.team_name}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em]">Accumulated Intel</p>
+                                        <p className={`text-4xl font-black ${idx === 0 ? 'text-neon-cyan drop-shadow-[0_0_10px_rgba(0,242,255,0.5)]' : 'text-white'}`}>
+                                            {player.score.toLocaleString()} <span className="text-xs uppercase italic ml-1">pts</span>
+                                        </p>
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
                     </div>
+
+                    <motion.button
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 1 }}
+                        onClick={() => window.location.href = '/'}
+                        className="mt-16 text-white/20 hover:text-white transition-colors text-sm font-black uppercase tracking-[0.5em] italic"
+                    >
+                        [ Return to Command Center ]
+                    </motion.button>
                 </div>
             </div>
         )

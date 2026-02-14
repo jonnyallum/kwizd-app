@@ -76,24 +76,28 @@ function PlayerInterfaceContent() {
         fetchQuestion()
     }, [game?.current_question_id])
 
-    // Countdown timer
+    // Countdown timer sync with host
     useEffect(() => {
-        if (!game?.current_question_id || selectedAnswer || game?.status !== 'active') return
+        if (!game?.current_question_id || selectedAnswer || game?.status !== 'active' || !game?.question_started_at) return
 
-        const interval = setInterval(() => {
-            setTimeLeft((prev) => {
-                if (prev <= 1) {
-                    clearInterval(interval)
-                    // Auto-submit no answer when time runs out
-                    handleTimeUp()
-                    return 0
-                }
-                return prev - 1
-            })
-        }, 1000)
+        const updateTimer = () => {
+            const startedAt = new Date(game.question_started_at!).getTime()
+            const now = Date.now()
+            const elapsed = Math.floor((now - startedAt) / 1000)
+            const remaining = Math.max(0, 20 - elapsed)
+
+            setTimeLeft(remaining)
+
+            if (remaining <= 0) {
+                handleTimeUp()
+            }
+        }
+
+        updateTimer() // Initial sync
+        const interval = setInterval(updateTimer, 1000)
 
         return () => clearInterval(interval)
-    }, [game?.current_question_id, selectedAnswer, game?.status])
+    }, [game?.current_question_id, game?.question_started_at, selectedAnswer, game?.status])
 
     async function handleJoin(e: React.FormEvent) {
         e.preventDefault()
@@ -396,7 +400,8 @@ function PlayerInterfaceContent() {
 
     // ─── FINISHED SCREEN ───
     if (game?.status === 'finished') {
-        const podiumColors = ['text-yellow-400', 'text-gray-300', 'text-amber-600']
+        const podiumColors = ['bg-yellow-400/20 border-yellow-400/30', 'bg-gray-300/20 border-gray-300/30', 'bg-amber-600/20 border-amber-600/30']
+        const podiumText = ['text-yellow-400', 'text-gray-300', 'text-amber-400']
         const podiumLabels = ['🥇', '🥈', '🥉']
 
         return (
@@ -408,40 +413,60 @@ function PlayerInterfaceContent() {
                     animate={{ scale: 1, opacity: 1 }}
                     className="text-center relative z-10 w-full max-w-sm"
                 >
-                    <motion.div animate={{ y: [0, -15, 0] }} transition={{ repeat: Infinity, duration: 3 }}>
-                        <Trophy className="w-24 h-24 text-neon-cyan mx-auto mb-8 drop-shadow-[0_0_30px_rgba(0,242,255,0.5)]" />
+                    <motion.div
+                        animate={{ y: [0, -15, 0], rotate: [0, 5, -5, 0] }}
+                        transition={{ repeat: Infinity, duration: 4 }}
+                        className="relative inline-block mb-8"
+                    >
+                        <div className="absolute inset-0 bg-neon-cyan/20 blur-2xl rounded-full" />
+                        <Trophy className="w-24 h-24 text-neon-cyan relative z-10 drop-shadow-[0_0_30px_rgba(0,242,255,0.5)]" />
                     </motion.div>
 
                     <h1 className="text-5xl font-black text-white mb-2 uppercase italic tracking-tighter">
                         Game <span className="text-gradient">Over</span>
                     </h1>
-                    <p className="text-white/30 text-xs uppercase tracking-[0.3em] mb-8">Final Results</p>
+                    <p className="text-white/30 text-xs uppercase tracking-[0.3em] mb-8">Neural Session Terminated</p>
 
                     {/* Your Result */}
-                    <div className="glass-dark p-8 rounded-[2rem] border border-white/5 mb-6">
-                        <p className="text-white/40 text-xs font-black uppercase tracking-[0.3em] mb-3">Your Finish</p>
-                        <p className="text-7xl font-black text-white mb-3">
+                    <motion.div
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.2 }}
+                        className="glass-dark p-8 rounded-[2.5rem] border-gradient mb-8 relative group overflow-hidden"
+                    >
+                        <div className="absolute inset-0 bg-gradient-to-br from-electric-purple/5 to-neon-cyan/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em] mb-4">Your Final Rank</p>
+                        <p className="text-8xl font-black text-white mb-4 tracking-tighter italic">
                             {myRank <= 3 ? podiumLabels[myRank - 1] : `#${myRank}`}
                         </p>
-                        <p className="text-3xl font-black text-neon-cyan">{myPlayer?.score || 0} pts</p>
-                    </div>
+                        <p className="text-4xl font-black text-gradient">
+                            {myPlayer?.score.toLocaleString() || 0} <span className="text-sm italic uppercase ml-1">pts</span>
+                        </p>
+                    </motion.div>
 
-                    {/* Top 3 */}
-                    <div className="space-y-2 mb-8">
+                    {/* Top 5 Leaderboard */}
+                    <div className="space-y-3 mb-10">
                         {sortedPlayers.slice(0, 5).map((player, idx) => (
-                            <div
+                            <motion.div
                                 key={player.id}
-                                className={`flex items-center justify-between p-3 rounded-xl ${player.id === playerId ? 'bg-neon-cyan/10 border border-neon-cyan/20' : 'bg-white/5'
+                                initial={{ x: -20, opacity: 0 }}
+                                animate={{ x: 0, opacity: 1 }}
+                                transition={{ delay: 0.4 + (idx * 0.1) }}
+                                className={`flex items-center justify-between p-4 rounded-2xl transition-all ${player.id === playerId
+                                        ? 'bg-neon-cyan/20 border-2 border-neon-cyan/30 shadow-[0_0_20px_rgba(0,242,255,0.1)]'
+                                        : 'bg-white/5 border border-white/5 opacity-80'
                                     }`}
                             >
-                                <div className="flex items-center gap-3">
-                                    <span className={`text-lg font-black ${podiumColors[idx] || 'text-white/40'}`}>
-                                        #{idx + 1}
+                                <div className="flex items-center gap-4">
+                                    <span className={`text-xl font-black italic ${idx < 3 ? podiumText[idx] : 'text-white/20'}`}>
+                                        {idx + 1}
                                     </span>
-                                    <span className="text-white font-bold text-sm">{player.team_name}</span>
+                                    <span className="text-white font-bold text-sm uppercase tracking-tight">{player.team_name}</span>
                                 </div>
-                                <span className="text-neon-cyan font-black text-sm">{player.score} pts</span>
-                            </div>
+                                <span className={`font-black text-sm ${player.id === playerId ? 'text-neon-cyan' : 'text-white/40'}`}>
+                                    {player.score.toLocaleString()}
+                                </span>
+                            </motion.div>
                         ))}
                     </div>
 
@@ -449,9 +474,9 @@ function PlayerInterfaceContent() {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => window.location.reload()}
-                        className="text-white/40 hover:text-white transition-colors text-xs font-black uppercase tracking-[0.3em]"
+                        className="text-white/40 hover:text-white transition-colors text-[10px] font-black uppercase tracking-[0.5em] italic border-b border-white/5 pb-1"
                     >
-                        Play Again
+                        [ Re-Enter Simulation ]
                     </motion.button>
                 </motion.div>
             </div>
