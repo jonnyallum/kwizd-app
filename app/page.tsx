@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Zap, Play, Settings, Users, Trophy, MessageSquare } from 'lucide-react'
+import { Zap, Play, Settings, Users, Trophy, MessageSquare, LogIn, CreditCard } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 
@@ -67,20 +67,48 @@ export default function Home() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6, duration: 0.8 }}
-          className="flex flex-col md:flex-row gap-6 justify-center"
+          className="flex flex-col md:flex-row gap-6 justify-center items-center"
         >
           <Link href="/select" className="group">
-            <div className="px-10 py-5 rounded-2xl bg-white text-obsidian font-bold text-xl flex items-center justify-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(255,255,255,0.2)]">
-              <Zap className="w-6 h-6 fill-obsidian" />
+            <motion.div
+              whileHover={{ scale: 1.05, y: -5 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-10 py-5 rounded-2xl bg-white text-obsidian font-black text-xl flex items-center justify-center gap-3 transition-all hover:shadow-[0_0_40px_rgba(255,255,255,0.4)]"
+            >
+              <Zap className="w-6 h-6 fill-obsidian group-hover:scale-125 transition-transform" />
               Host a Game
-            </div>
+            </motion.div>
           </Link>
 
           <Link href="/play" className="group">
-            <div className="px-10 py-5 rounded-2xl border-gradient text-white font-bold text-xl flex items-center justify-center gap-3 transition-all hover:scale-105 active:scale-95 glass">
-              <Play className="w-6 h-6 fill-white" />
+            <motion.div
+              whileHover={{ scale: 1.05, y: -5 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-10 py-5 rounded-2xl border-gradient text-white font-black text-xl flex items-center justify-center gap-3 transition-all glass hover:shadow-[0_0_40px_rgba(0,242,255,0.2)]"
+            >
+              <Play className="w-6 h-6 fill-white group-hover:scale-125 transition-transform" />
               Join Game
-            </div>
+            </motion.div>
+          </Link>
+
+          <Link href="/pricing" className="flex items-center justify-center">
+            <motion.div
+              whileHover={{ x: 5 }}
+              className="text-white/40 hover:text-white transition-colors text-xs font-black uppercase tracking-[0.3em] flex items-center gap-2"
+            >
+              <CreditCard className="w-4 h-4" />
+              Pricing
+            </motion.div>
+          </Link>
+
+          <Link href="/login" className="flex items-center justify-center">
+            <motion.div
+              whileHover={{ x: 5 }}
+              className="text-white/40 hover:text-white transition-colors text-xs font-black uppercase tracking-[0.3em] flex items-center gap-2"
+            >
+              <LogIn className="w-4 h-4" />
+              Enter Portal
+            </motion.div>
           </Link>
         </motion.div>
 
@@ -107,7 +135,7 @@ export default function Home() {
       </div>
 
       {/* Navigation Footer / Neural Registry */}
-      <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-4">
+      <div className="relative mt-24 md:mt-32 flex flex-col items-center gap-4 pb-8">
         <div className="flex flex-col items-center opacity-20 hover:opacity-100 transition-opacity duration-500">
           <p className="text-[10px] tracking-[0.4em] text-white uppercase mb-2">Kwizz.co.uk // Neural Node_03</p>
           <div className="flex gap-4 text-[9px] font-black text-white/40 uppercase tracking-tighter">

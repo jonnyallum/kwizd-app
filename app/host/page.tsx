@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useGameSync, setCurrentQuestion, updateGameStatus } from '@/lib/useGameSync'
 import { supabase } from '@/lib/supabase'
 import { Users, Trophy, Clock } from 'lucide-react'
@@ -18,12 +18,14 @@ interface Question {
     question_order: number
 }
 
+import { motion, AnimatePresence } from 'framer-motion'
+
 function HostDashboardContent() {
     const searchParams = useSearchParams()
     const gameId = searchParams.get('id')
     const pin = searchParams.get('pin')
 
-    const { game, players, responses, loading } = useGameSync(gameId)
+    const { game, setGame, players, responses, loading } = useGameSync(gameId)
     const [questions, setQuestions] = useState<Question[]>([])
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
     const [countdown, setCountdown] = useState(10)
@@ -31,39 +33,84 @@ function HostDashboardContent() {
 
     useEffect(() => {
         if (game?.quiz_id) {
+            console.log('[Kwizz] Game loaded, quiz_id:', game.quiz_id)
             loadQuestions(game.quiz_id)
         }
     }, [game?.quiz_id])
 
     async function loadQuestions(quizId: string) {
-        const { data, error } = await supabase
-            .from('questions')
-            .select('*')
-            .eq('quiz_id', quizId)
-            .order('question_order')
+        console.log('[Kwizz] Loading questions for quiz:', quizId)
+        try {
+            const { data, error } = await supabase
+                .from('questions')
+                .select('*')
+                .eq('quiz_id', quizId)
+                .order('question_order')
 
-        if (!error && data) {
-            setQuestions(data)
+            if (error) {
+                console.error('[Kwizz] Error loading questions:', error)
+                return
+            }
+            console.log('[Kwizz] Loaded', data?.length, 'questions')
+            setQuestions(data || [])
+        } catch (err) {
+            console.error('[Kwizz] Exception loading questions:', err)
         }
     }
 
     async function startGame() {
-        if (gameId && questions.length > 0) {
+        if (!gameId) {
+            console.error('[Kwizz] No gameId!')
+            return
+        }
+        if (questions.length === 0) {
+            console.error('[Kwizz] No questions loaded!')
+            alert('Questions are still loading. Please wait a moment and try again.')
+            return
+        }
+        try {
+            console.log('[Kwizz] Starting game...', gameId, 'with', questions.length, 'questions')
+
+            // Optimistically update local state FIRST so UI transitions immediately
+            setGame(prev => prev ? { ...prev, status: 'active' as const, current_question_id: questions[0].id } : prev)
+            setCurrentQuestionIndex(0)
+            setCountdown(10)
+
+            // Then persist to DB (fire and forget with error handling)
             await updateGameStatus(gameId, 'active')
             await setCurrentQuestion(gameId, questions[0].id)
-            setCountdown(10)
+            console.log('[Kwizz] Game started successfully!')
+        } catch (err) {
+            console.error('[Kwizz] Error starting game:', err)
+            // Revert optimistic update on failure
+            setGame(prev => prev ? { ...prev, status: 'lobby' as const, current_question_id: null } : prev)
+            alert('Failed to start game. Please try again.')
         }
     }
 
     async function nextQuestion() {
         const nextIndex = currentQuestionIndex + 1
         if (nextIndex < questions.length && gameId) {
+            // Optimistic update
             setCurrentQuestionIndex(nextIndex)
-            await setCurrentQuestion(gameId, questions[nextIndex].id)
+            setGame(prev => prev ? { ...prev, current_question_id: questions[nextIndex].id } : prev)
             setShowingAnswer(false)
             setCountdown(10)
+
+            try {
+                await setCurrentQuestion(gameId, questions[nextIndex].id)
+            } catch (err) {
+                console.error('[Kwizz] Error advancing question:', err)
+            }
         } else if (gameId) {
-            await updateGameStatus(gameId, 'finished')
+            // Optimistic update to finished
+            setGame(prev => prev ? { ...prev, status: 'finished' as const } : prev)
+
+            try {
+                await updateGameStatus(gameId, 'finished')
+            } catch (err) {
+                console.error('[Kwizz] Error finishing game:', err)
+            }
         }
     }
 
@@ -75,13 +122,19 @@ function HostDashboardContent() {
     }, [countdown, game?.status, showingAnswer])
 
     const currentQuestion = questions[currentQuestionIndex]
-    const joinUrl = typeof window !== 'undefined' ? `${window.location.origin}/play?pin=${pin}` : ''
+    const joinUrl = typeof window !== 'undefined' ? `${window.location.origin}/play/?pin=${pin}` : ''
 
     // Loading View
     if (loading || !gameId) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-obsidian via-obsidian-light to-obsidian flex items-center justify-center">
-                <p className="text-white/60">Loading game...</p>
+            <div className="min-h-screen bg-obsidian flex items-center justify-center">
+                <motion.div
+                    animate={{ scale: [1, 1.1, 1], opacity: [0.5, 1, 0.5] }}
+                    transition={{ repeat: Infinity, duration: 2 }}
+                    className="text-center"
+                >
+                    <p className="text-white font-black uppercase tracking-[0.5em]">Syncing Intelligence...</p>
+                </motion.div>
             </div>
         )
     }
@@ -89,52 +142,81 @@ function HostDashboardContent() {
     // Lobby View
     if (game?.status === 'lobby') {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-obsidian via-obsidian-light to-obsidian p-8">
-                <div className="max-w-6xl mx-auto">
-                    <div className="text-center mb-12">
-                        <h1 className="text-6xl font-bold text-white mb-4">Game Lobby</h1>
-                        <div className="inline-block bg-gradient-to-r from-electric-purple to-neon-cyan p-1 rounded-2xl">
-                            <div className="bg-obsidian px-12 py-6 rounded-xl">
-                                <p className="text-white/60 text-sm mb-2">Join PIN</p>
-                                <p className="text-7xl font-bold text-white tracking-wider">{pin}</p>
-                            </div>
-                        </div>
-                    </div>
+            <div className="min-h-screen bg-obsidian p-8 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-[50%] h-[50%] bg-electric-purple/10 blur-[120px] rounded-full" />
+                <div className="absolute bottom-0 left-0 w-[50%] h-[50%] bg-neon-cyan/10 blur-[120px] rounded-full" />
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                        {/* QR Code */}
-                        <div className="glass-card p-8 text-center">
-                            <h3 className="text-2xl font-bold text-white mb-6">Scan to Join</h3>
-                            <div className="bg-white p-6 rounded-xl inline-block">
-                                <QRCode value={joinUrl} size={200} />
+                <div className="max-w-6xl mx-auto relative z-10">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="text-center mb-16"
+                    >
+                        <h1 className="text-8xl font-black text-white mb-6 tracking-tighter italic uppercase">
+                            The <span className="text-gradient">Lobby</span>
+                        </h1>
+                        <div className="inline-block relative">
+                            <div className="absolute inset-0 bg-gradient-to-r from-electric-purple to-neon-cyan blur-2xl opacity-20" />
+                            <div className="relative glass-dark px-16 py-10 rounded-[2.5rem] border-gradient">
+                                <p className="text-white/40 text-xs font-black uppercase tracking-[0.4em] mb-4">Frequency PIN</p>
+                                <p className="text-9xl font-black text-white tracking-[0.2em]">{pin}</p>
                             </div>
-                            <p className="text-white/40 text-sm mt-4">{joinUrl}</p>
                         </div>
+                    </motion.div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-12">
+                        {/* QR Code */}
+                        <motion.div
+                            initial={{ x: -50, opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            transition={{ delay: 0.2 }}
+                            className="glass-dark p-12 rounded-[3rem] border-gradient text-center"
+                        >
+                            <h3 className="text-2xl font-black text-white mb-8 uppercase tracking-widest">Neural Link</h3>
+                            <div className="bg-white p-8 rounded-[2rem] inline-block shadow-[0_0_50px_rgba(255,255,255,0.1)]">
+                                <QRCode value={joinUrl} size={250} />
+                            </div>
+                            <p className="text-white/20 font-mono text-xs mt-8 truncate max-w-xs mx-auto italic">{joinUrl}</p>
+                        </motion.div>
 
                         {/* Player Count */}
-                        <div className="glass-card p-8">
-                            <div className="flex items-center gap-4 mb-6">
-                                <Users className="w-8 h-8 text-neon-cyan" />
-                                <h3 className="text-2xl font-bold text-white">Players Joined</h3>
+                        <motion.div
+                            initial={{ x: 50, opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            transition={{ delay: 0.2 }}
+                            className="glass-dark p-12 rounded-[3rem] border-gradient"
+                        >
+                            <div className="flex items-center gap-6 mb-8">
+                                <Users className="w-10 h-10 text-neon-cyan" />
+                                <h3 className="text-2xl font-black text-white uppercase tracking-widest">Active Nodes</h3>
                             </div>
-                            <p className="text-6xl font-bold text-electric-purple mb-6">{players.length}</p>
-                            <div className="space-y-2 max-h-64 overflow-y-auto">
-                                {players.map((player) => (
-                                    <div key={player.id} className="bg-white/5 px-4 py-2 rounded-lg">
-                                        <p className="text-white font-medium">{player.team_name}</p>
-                                    </div>
-                                ))}
+                            <p className="text-9xl font-black text-gradient mb-8">{players.length}</p>
+                            <div className="grid grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-4 scrollbar-hide">
+                                <AnimatePresence>
+                                    {players.map((player) => (
+                                        <motion.div
+                                            key={player.id}
+                                            initial={{ opacity: 0, scale: 0.8 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            className="bg-white/5 px-6 py-3 rounded-2xl border border-white/5"
+                                        >
+                                            <p className="text-white font-bold truncate text-sm">{player.team_name}</p>
+                                        </motion.div>
+                                    ))}
+                                </AnimatePresence>
                             </div>
-                        </div>
+                        </motion.div>
                     </div>
 
-                    <button
+                    <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={startGame}
                         disabled={players.length === 0 || questions.length === 0}
-                        className="w-full bg-gradient-to-r from-electric-purple to-neon-cyan text-white text-2xl font-bold py-6 rounded-xl hover:shadow-glow-purple transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full bg-white text-obsidian text-3xl font-black py-8 rounded-[2rem] shadow-[0_20px_40px_rgba(0,0,0,0.5)] hover:bg-neon-cyan transition-all disabled:opacity-20 uppercase italic tracking-tighter"
                     >
-                        {questions.length === 0 ? 'Loading Questions...' : `Start Game (${players.length} Players)`}
-                    </button>
+                        {questions.length === 0 ? 'Loading Neural Packs...' : `Engage Engine (${players.length} Players)`}
+                    </motion.button>
                 </div>
             </div>
         )
@@ -146,37 +228,37 @@ function HostDashboardContent() {
         const sortedResponses = [...questionResponses].sort((a, b) => a.speed_ms - b.speed_ms)
 
         return (
-            <div className="min-h-screen bg-gradient-to-br from-obsidian via-obsidian-light to-obsidian p-8">
+            <div className="min-h-screen bg-obsidian p-4 md:p-8">
                 <div className="max-w-6xl mx-auto">
                     {/* Question Header */}
-                    <div className="flex items-center justify-between mb-8">
-                        <div className="flex items-center gap-4">
-                            <div className="bg-electric-purple/20 px-6 py-3 rounded-lg">
-                                <p className="text-white font-bold">
-                                    Question {currentQuestionIndex + 1} / {questions.length}
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-6 md:mb-8">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-electric-purple/20 px-4 md:px-6 py-2 md:py-3 rounded-xl">
+                                <p className="text-white font-bold text-sm md:text-base">
+                                    Q{currentQuestionIndex + 1}/{questions.length}
                                 </p>
                             </div>
-                            <div className="bg-neon-cyan/20 px-6 py-3 rounded-lg">
-                                <p className="text-white font-bold capitalize">{currentQuestion.difficulty}</p>
+                            <div className="bg-neon-cyan/20 px-4 md:px-6 py-2 md:py-3 rounded-xl">
+                                <p className="text-white font-bold capitalize text-sm md:text-base">{currentQuestion.difficulty}</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3 bg-white/10 px-6 py-3 rounded-lg">
-                            <Clock className="w-6 h-6 text-neon-cyan" />
-                            <span className="text-3xl font-bold text-white">{countdown}s</span>
+                        <div className="flex items-center gap-3 bg-white/10 px-4 md:px-6 py-2 md:py-3 rounded-xl">
+                            <Clock className="w-5 h-5 md:w-6 md:h-6 text-neon-cyan" />
+                            <span className="text-2xl md:text-3xl font-bold text-white">{countdown}s</span>
                         </div>
                     </div>
 
                     {/* Question */}
-                    <div className="glass-card p-12 mb-8">
-                        <h2 className="text-4xl font-bold text-white mb-8">{currentQuestion.text}</h2>
-                        {currentQuestion.type === 'multiple_choice' && (
-                            <div className="grid grid-cols-2 gap-4">
+                    <div className="glass-card p-6 md:p-12 mb-6 md:mb-8">
+                        <h2 className="text-2xl md:text-4xl font-bold text-white mb-6 md:mb-8">{currentQuestion.text}</h2>
+                        {currentQuestion.options && currentQuestion.options.length > 0 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                                 {currentQuestion.options.map((option, idx) => (
                                     <div
                                         key={idx}
                                         className={`p-6 rounded-xl text-xl font-bold transition-all ${showingAnswer && option === currentQuestion.answer
-                                                ? 'bg-green-500 text-white'
-                                                : 'bg-white/10 text-white'
+                                            ? 'bg-green-500 text-white'
+                                            : 'bg-white/10 text-white'
                                             }`}
                                     >
                                         {option}

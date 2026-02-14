@@ -1,10 +1,27 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { joinGame, useGameSync, submitBuzzer } from '@/lib/useGameSync'
+import { joinGame, useGameSync, submitAnswer } from '@/lib/useGameSync'
+import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Zap, Trophy, Clock } from 'lucide-react'
+import { Trophy, Check, X, ChevronUp } from 'lucide-react'
+
+interface Question {
+    id: string
+    text: string
+    options: string[]
+    answer: string
+}
+
+const OPTION_COLORS = [
+    { bg: 'bg-red-500', hover: 'hover:bg-red-400', ring: 'ring-red-400', text: 'text-red-500' },
+    { bg: 'bg-blue-500', hover: 'hover:bg-blue-400', ring: 'ring-blue-400', text: 'text-blue-500' },
+    { bg: 'bg-yellow-500', hover: 'hover:bg-yellow-400', ring: 'ring-yellow-400', text: 'text-yellow-500' },
+    { bg: 'bg-green-500', hover: 'hover:bg-green-400', ring: 'ring-green-400', text: 'text-green-500' },
+]
+
+const OPTION_LABELS = ['A', 'B', 'C', 'D']
 
 function PlayerInterfaceContent() {
     const searchParams = useSearchParams()
@@ -15,249 +32,427 @@ function PlayerInterfaceContent() {
     const [gameId, setGameId] = useState<string | null>(null)
     const [playerId, setPlayerId] = useState<string | null>(null)
     const [joining, setJoining] = useState(false)
-    const [buzzerPressed, setBuzzerPressed] = useState(false)
-    const [buzzerTime, setBuzzerTime] = useState<number | null>(null)
+    const [joinError, setJoinError] = useState<string | null>(null)
+
+    // Answer state
+    const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null)
+    const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
+    const [answerResult, setAnswerResult] = useState<{ isCorrect: boolean; pointsEarned: number } | null>(null)
+    const [submitting, setSubmitting] = useState(false)
+    const [timeLeft, setTimeLeft] = useState(20)
+    const [questionStartTime, setQuestionStartTime] = useState<number | null>(null)
+    const lastQuestionId = useRef<string | null>(null)
 
     const { game, players } = useGameSync(gameId)
-
-    // Use URL pin if available, otherwise manual pin
     const activePin = urlPin || manualPin
+
+    // Fetch question when current_question_id changes
+    useEffect(() => {
+        if (!game?.current_question_id || game.current_question_id === lastQuestionId.current) return
+
+        lastQuestionId.current = game.current_question_id
+        setSelectedAnswer(null)
+        setAnswerResult(null)
+        setSubmitting(false)
+        setTimeLeft(20)
+        setQuestionStartTime(performance.now())
+
+        const fetchQuestion = async () => {
+            const { data, error } = await supabase
+                .from('questions')
+                .select('id, text, options, answer')
+                .eq('id', game.current_question_id!)
+                .single()
+
+            if (!error && data) {
+                setCurrentQuestion({
+                    id: data.id,
+                    text: data.text,
+                    options: data.options || [],
+                    answer: data.answer,
+                })
+            }
+        }
+        fetchQuestion()
+    }, [game?.current_question_id])
+
+    // Countdown timer
+    useEffect(() => {
+        if (!game?.current_question_id || selectedAnswer || game?.status !== 'active') return
+
+        const interval = setInterval(() => {
+            setTimeLeft((prev) => {
+                if (prev <= 1) {
+                    clearInterval(interval)
+                    // Auto-submit no answer when time runs out
+                    handleTimeUp()
+                    return 0
+                }
+                return prev - 1
+            })
+        }, 1000)
+
+        return () => clearInterval(interval)
+    }, [game?.current_question_id, selectedAnswer, game?.status])
 
     async function handleJoin(e: React.FormEvent) {
         e.preventDefault()
         if (!activePin || !teamName.trim()) return
 
         setJoining(true)
+        setJoinError(null)
         try {
             const { gameId: gId, playerId: pId } = await joinGame(activePin, teamName.trim())
             setGameId(gId)
             setPlayerId(pId)
         } catch (error) {
-            alert('Failed to join game. Check your PIN and try again.')
+            setJoinError(error instanceof Error ? error.message : 'Failed to join. Check your PIN.')
         } finally {
             setJoining(false)
         }
     }
 
-    async function handleBuzzer() {
-        if (!gameId || !playerId || !game?.current_question_id || buzzerPressed) return
+    async function handleSelectAnswer(answer: string) {
+        if (!gameId || !playerId || !game?.current_question_id || selectedAnswer || submitting) return
 
-        const pressTime = Date.now()
-        setBuzzerPressed(true)
-        setBuzzerTime(pressTime)
+        const speedMs = questionStartTime ? Math.round(performance.now() - questionStartTime) : 5000
+        setSelectedAnswer(answer)
+        setSubmitting(true)
 
         try {
-            // Calculate speed from question start (simplified - in production track actual question start time)
-            const speedMs = Math.floor(Math.random() * 3000) // Placeholder - replace with actual timing
-            await submitBuzzer(gameId, playerId, game.current_question_id, speedMs)
+            const result = await submitAnswer(gameId, playerId, game.current_question_id, answer, speedMs)
+            setAnswerResult(result)
         } catch (error) {
-            console.error('Buzzer error:', error)
-            setBuzzerPressed(false)
+            console.error('Answer submit error:', error)
+            setAnswerResult({ isCorrect: false, pointsEarned: 0 })
+        } finally {
+            setSubmitting(false)
         }
     }
 
-    // Reset buzzer when new question appears
-    useEffect(() => {
-        if (game?.current_question_id) {
-            setBuzzerPressed(false)
-            setBuzzerTime(null)
-        }
-    }, [game?.current_question_id])
+    function handleTimeUp() {
+        if (selectedAnswer) return
+        setSelectedAnswer('__TIMEOUT__')
+        setAnswerResult({ isCorrect: false, pointsEarned: 0 })
+    }
 
-    const myPlayer = players.find(p => p.id === playerId)
-    const myRank = players
-        .sort((a, b) => b.score - a.score)
-        .findIndex(p => p.id === playerId) + 1
+    const myPlayer = players.find((p) => p.id === playerId)
+    const sortedPlayers = [...players].sort((a, b) => b.score - a.score)
+    const myRank = sortedPlayers.findIndex((p) => p.id === playerId) + 1
 
-    // Join Screen
+    // ─── JOIN SCREEN ───
     if (!gameId) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-obsidian via-obsidian-light to-obsidian flex items-center justify-center p-6">
+            <div className="min-h-screen bg-obsidian flex items-center justify-center p-6 relative overflow-hidden">
+                <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-electric-purple/10 blur-[150px] rounded-full" />
+                <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-neon-cyan/10 blur-[150px] rounded-full" />
+
                 <motion.div
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className="w-full max-w-md"
+                    className="w-full max-w-md relative z-10"
                 >
-                    <div className="text-center mb-8">
-                        <h1 className="text-5xl font-bold text-white mb-4">Join Game</h1>
-                        {urlPin && <p className="text-white/60 text-xl">PIN: <span className="text-neon-cyan font-bold">{urlPin}</span></p>}
+                    <div className="text-center mb-12">
+                        <h1 className="text-5xl font-black text-white mb-2 uppercase italic tracking-tighter">
+                            Join <span className="text-gradient">Quiz</span>
+                        </h1>
+                        <p className="text-white/30 text-xs uppercase tracking-[0.3em]">No app needed. Just play.</p>
+                        {urlPin && (
+                            <div className="inline-block glass-dark px-6 py-2 rounded-full border border-white/10 mt-4">
+                                <p className="text-white/60 text-sm uppercase tracking-widest">
+                                    PIN: <span className="text-neon-cyan font-black">{urlPin}</span>
+                                </p>
+                            </div>
+                        )}
                     </div>
 
-                    <form onSubmit={handleJoin} className="glass-card p-8">
-                        {/* PIN Input - Only show if not in URL */}
+                    <form onSubmit={handleJoin} className="glass-dark p-8 rounded-[2rem] border border-white/5">
                         {!urlPin && (
-                            <label className="block mb-6">
-                                <span className="text-white font-bold mb-2 block">Game PIN</span>
+                            <div className="mb-6">
+                                <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em] mb-3">Game PIN</p>
                                 <input
                                     type="text"
+                                    inputMode="numeric"
                                     value={manualPin}
-                                    onChange={(e) => setManualPin(e.target.value)}
-                                    placeholder="Enter 4-digit PIN"
-                                    className="w-full bg-white/10 border-2 border-white/20 rounded-lg px-6 py-4 text-white text-xl placeholder-white/40 focus:border-electric-purple focus:outline-none transition-colors text-center font-mono tracking-widest"
+                                    onChange={(e) => setManualPin(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="0000"
+                                    className="w-full bg-white/5 border-2 border-white/10 rounded-2xl px-6 py-5 text-white text-4xl text-center font-black placeholder-white/10 focus:border-neon-cyan focus:outline-none transition-all tracking-[0.5em]"
                                     maxLength={4}
                                     required
                                 />
-                            </label>
+                            </div>
                         )}
 
-                        <label className="block mb-6">
-                            <span className="text-white font-bold mb-2 block">Team Name</span>
+                        <div className="mb-8">
+                            <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em] mb-3">Team Name</p>
                             <input
                                 type="text"
                                 value={teamName}
                                 onChange={(e) => setTeamName(e.target.value)}
                                 placeholder="Enter your team name"
-                                className="w-full bg-white/10 border-2 border-white/20 rounded-lg px-6 py-4 text-white text-xl placeholder-white/40 focus:border-electric-purple focus:outline-none transition-colors"
+                                className="w-full bg-white/5 border-2 border-white/10 rounded-2xl px-6 py-5 text-white text-xl font-bold placeholder-white/10 focus:border-electric-purple focus:outline-none transition-all"
                                 maxLength={30}
                                 required
                             />
-                        </label>
+                        </div>
 
-                        <button
+                        {joinError && (
+                            <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                                <p className="text-red-400 text-sm font-bold">{joinError}</p>
+                            </div>
+                        )}
+
+                        <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
                             type="submit"
                             disabled={joining || !teamName.trim() || !activePin}
-                            className="w-full bg-gradient-to-r from-electric-purple to-neon-cyan text-white text-xl font-bold py-4 rounded-lg hover:shadow-glow-purple transition-all disabled:opacity-50"
+                            className="w-full bg-white text-obsidian text-xl font-black py-5 rounded-2xl shadow-[0_10px_30px_rgba(255,255,255,0.1)] hover:bg-neon-cyan transition-all disabled:opacity-20 uppercase"
                         >
                             {joining ? 'Joining...' : 'Join Game'}
-                        </button>
+                        </motion.button>
                     </form>
                 </motion.div>
             </div>
         )
     }
 
-    // Lobby Screen
+    // ─── LOBBY SCREEN ───
     if (game?.status === 'lobby') {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-obsidian via-obsidian-light to-obsidian flex flex-col items-center justify-center p-6">
+            <div className="min-h-screen bg-obsidian flex flex-col items-center justify-center p-6 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,rgba(157,29,242,0.05)_0%,transparent_70%)]" />
+
                 <motion.div
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className="text-center"
+                    className="text-center relative z-10"
                 >
-                    <div className="mb-8">
-                        <div className="w-24 h-24 bg-gradient-to-br from-electric-purple to-neon-cyan rounded-full mx-auto mb-6 flex items-center justify-center">
-                            <Trophy className="w-12 h-12 text-white" />
-                        </div>
-                        <h1 className="text-4xl font-bold text-white mb-4">You're In!</h1>
-                        <p className="text-2xl text-electric-purple font-bold mb-2">{teamName}</p>
-                        <p className="text-white/60">Waiting for host to start the game...</p>
-                    </div>
-
-                    <div className="glass-card p-6 inline-block">
-                        <p className="text-white/60 text-sm mb-2">Players Joined</p>
-                        <p className="text-5xl font-bold text-neon-cyan">{players.length}</p>
-                    </div>
-
                     <motion.div
-                        animate={{ scale: [1, 1.1, 1] }}
-                        transition={{ repeat: Infinity, duration: 2 }}
-                        className="mt-8"
+                        animate={{ y: [0, -10, 0] }}
+                        transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
+                        className="w-28 h-28 bg-gradient-to-br from-electric-purple to-neon-cyan rounded-[2rem] mx-auto mb-8 flex items-center justify-center shadow-[0_0_50px_rgba(157,29,242,0.3)]"
                     >
-                        <div className="w-16 h-16 border-4 border-electric-purple border-t-transparent rounded-full animate-spin mx-auto" />
+                        <Trophy className="w-14 h-14 text-white" />
                     </motion.div>
+
+                    <h1 className="text-4xl font-black text-white mb-3 uppercase italic tracking-tighter">
+                        You&apos;re In!
+                    </h1>
+                    <p className="text-2xl text-neon-cyan font-black mb-2 uppercase tracking-tight">{teamName}</p>
+                    <p className="text-white/20 text-xs font-black uppercase tracking-[0.3em] mb-10">
+                        Waiting for host to start...
+                    </p>
+
+                    <div className="glass-dark px-10 py-6 rounded-[2rem] border border-white/5 inline-block">
+                        <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em] mb-2">Players Joined</p>
+                        <p className="text-5xl font-black text-white">{players.length}</p>
+                    </div>
                 </motion.div>
             </div>
         )
     }
 
-    // Active Game - Buzzer Screen
+    // ─── ACTIVE GAME — ANSWER SELECTION ───
     if (game?.status === 'active') {
+        // Waiting for next question
+        if (!currentQuestion || !game.current_question_id) {
+            return (
+                <div className="min-h-screen bg-obsidian flex flex-col items-center justify-center p-6">
+                    <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                        className="w-16 h-16 border-4 border-white/10 border-t-neon-cyan rounded-full mb-6"
+                    />
+                    <p className="text-white/40 text-sm font-bold uppercase tracking-widest">Next question loading...</p>
+                </div>
+            )
+        }
+
         return (
-            <div className="min-h-screen bg-gradient-to-br from-obsidian via-obsidian-light to-obsidian flex flex-col p-6">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-6">
-                    <div className="glass-card px-4 py-2">
-                        <p className="text-white font-bold">{teamName}</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="glass-card px-4 py-2">
-                            <p className="text-neon-cyan font-bold">Rank #{myRank}</p>
+            <div className="min-h-screen bg-obsidian flex flex-col relative overflow-hidden">
+                {/* Header: Score + Rank */}
+                <div className="flex items-center justify-between p-4 relative z-10">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-white/5 px-4 py-2 rounded-xl">
+                            <p className="text-white font-black text-sm">{teamName}</p>
                         </div>
-                        <div className="glass-card px-4 py-2">
-                            <p className="text-electric-purple font-bold">{myPlayer?.score || 0} pts</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="bg-neon-cyan/10 px-3 py-2 rounded-xl">
+                            <p className="text-neon-cyan font-black text-sm">#{myRank || '—'}</p>
+                        </div>
+                        <div className="bg-electric-purple/10 px-3 py-2 rounded-xl">
+                            <p className="text-electric-purple font-black text-sm">{myPlayer?.score || 0} pts</p>
                         </div>
                     </div>
                 </div>
 
-                {/* Buzzer */}
-                <div className="flex-1 flex items-center justify-center">
-                    <AnimatePresence mode="wait">
-                        {!buzzerPressed ? (
-                            <motion.button
-                                key="buzzer"
-                                initial={{ scale: 0.8, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                exit={{ scale: 0.8, opacity: 0 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={handleBuzzer}
-                                className="relative w-80 h-80 rounded-full bg-gradient-to-br from-electric-purple via-neon-cyan to-electric-purple shadow-2xl shadow-electric-purple/50 active:shadow-glow-purple transition-all"
-                            >
-                                <motion.div
-                                    animate={{
-                                        scale: [1, 1.1, 1],
-                                        rotate: [0, 5, -5, 0]
-                                    }}
-                                    transition={{
-                                        repeat: Infinity,
-                                        duration: 2
-                                    }}
-                                    className="absolute inset-0 flex items-center justify-center"
-                                >
-                                    <Zap className="w-32 h-32 text-white drop-shadow-glow" />
-                                </motion.div>
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <span className="text-4xl font-bold text-white mt-32">BUZZ!</span>
-                                </div>
-                            </motion.button>
-                        ) : (
+                {/* Timer Bar */}
+                {!selectedAnswer && (
+                    <div className="px-4 relative z-10">
+                        <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
                             <motion.div
-                                key="buzzed"
-                                initial={{ scale: 0.8, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                className="text-center"
-                            >
-                                <motion.div
-                                    animate={{ rotate: 360 }}
-                                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                                    className="w-32 h-32 border-8 border-electric-purple border-t-transparent rounded-full mx-auto mb-8"
-                                />
-                                <h2 className="text-4xl font-bold text-white mb-4">Buzzed In!</h2>
-                                <p className="text-white/60 text-xl">Waiting for results...</p>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
-
-                {/* Instructions */}
-                {!buzzerPressed && (
-                    <div className="text-center">
-                        <p className="text-white/60 text-lg">
-                            Tap the buzzer as fast as you can when you know the answer!
-                        </p>
+                                className={`h-full rounded-full ${timeLeft > 10 ? 'bg-neon-cyan' : timeLeft > 5 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                                initial={{ width: '100%' }}
+                                animate={{ width: `${(timeLeft / 20) * 100}%` }}
+                                transition={{ duration: 0.5 }}
+                            />
+                        </div>
+                        <p className="text-center text-white/30 text-xs font-bold mt-1">{timeLeft}s</p>
                     </div>
                 )}
+
+                {/* Answer Result Feedback */}
+                <AnimatePresence>
+                    {answerResult && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="px-4 mt-2 relative z-10"
+                        >
+                            <div
+                                className={`p-4 rounded-2xl text-center ${answerResult.isCorrect
+                                    ? 'bg-green-500/20 border border-green-500/30'
+                                    : 'bg-red-500/20 border border-red-500/30'
+                                    }`}
+                            >
+                                <div className="flex items-center justify-center gap-2 mb-1">
+                                    {answerResult.isCorrect ? (
+                                        <Check className="w-6 h-6 text-green-400" />
+                                    ) : (
+                                        <X className="w-6 h-6 text-red-400" />
+                                    )}
+                                    <span
+                                        className={`text-xl font-black ${answerResult.isCorrect ? 'text-green-400' : 'text-red-400'
+                                            }`}
+                                    >
+                                        {answerResult.isCorrect ? 'Correct!' : selectedAnswer === '__TIMEOUT__' ? 'Time\'s Up!' : 'Wrong!'}
+                                    </span>
+                                </div>
+                                {answerResult.pointsEarned > 0 && (
+                                    <div className="flex items-center justify-center gap-1">
+                                        <ChevronUp className="w-4 h-4 text-green-400" />
+                                        <span className="text-green-400 font-black text-sm">+{answerResult.pointsEarned} pts</span>
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Answer Options Grid */}
+                <div className="flex-1 flex items-center justify-center p-4 relative z-10">
+                    <div className="grid grid-cols-2 gap-3 w-full max-w-lg">
+                        {currentQuestion.options.map((option, idx) => {
+                            const color = OPTION_COLORS[idx] || OPTION_COLORS[0]
+                            const isSelected = selectedAnswer === option
+                            const isCorrectAnswer = answerResult && option === currentQuestion.answer
+                            const isWrongSelection = answerResult && isSelected && !answerResult.isCorrect
+                            const isDisabled = !!selectedAnswer || submitting
+
+                            let buttonClass = `${color.bg} ${color.hover}`
+                            if (isCorrectAnswer) buttonClass = 'bg-green-500 ring-4 ring-green-300'
+                            else if (isWrongSelection) buttonClass = 'bg-red-500/50 ring-4 ring-red-400'
+                            else if (answerResult && !isSelected) buttonClass = 'bg-white/5 opacity-40'
+
+                            return (
+                                <motion.button
+                                    key={idx}
+                                    whileTap={!isDisabled ? { scale: 0.95 } : undefined}
+                                    onClick={() => handleSelectAnswer(option)}
+                                    disabled={isDisabled}
+                                    className={`relative rounded-2xl p-5 min-h-[120px] flex flex-col items-center justify-center text-center transition-all ${buttonClass} ${isDisabled ? 'cursor-default' : 'cursor-pointer active:scale-95'
+                                        }`}
+                                >
+                                    <span className="text-white/60 text-xs font-black mb-1">{OPTION_LABELS[idx]}</span>
+                                    <span className="text-white font-bold text-base leading-tight">{option}</span>
+                                    {isCorrectAnswer && (
+                                        <motion.div
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            className="absolute top-2 right-2"
+                                        >
+                                            <Check className="w-6 h-6 text-white" />
+                                        </motion.div>
+                                    )}
+                                    {isWrongSelection && (
+                                        <motion.div
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            className="absolute top-2 right-2"
+                                        >
+                                            <X className="w-6 h-6 text-white" />
+                                        </motion.div>
+                                    )}
+                                </motion.button>
+                            )
+                        })}
+                    </div>
+                </div>
             </div>
         )
     }
 
-    // Finished Screen
+    // ─── FINISHED SCREEN ───
     if (game?.status === 'finished') {
+        const podiumColors = ['text-yellow-400', 'text-gray-300', 'text-amber-600']
+        const podiumLabels = ['🥇', '🥈', '🥉']
+
         return (
-            <div className="min-h-screen bg-gradient-to-br from-obsidian via-obsidian-light to-obsidian flex items-center justify-center p-6">
+            <div className="min-h-screen bg-obsidian flex items-center justify-center p-6 relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,242,255,0.1)_0%,transparent_70%)]" />
+
                 <motion.div
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className="text-center"
+                    className="text-center relative z-10 w-full max-w-sm"
                 >
-                    <Trophy className="w-24 h-24 text-electric-purple mx-auto mb-6" />
-                    <h1 className="text-5xl font-bold text-white mb-4">Game Over!</h1>
-                    <div className="glass-card p-8 mb-6">
-                        <p className="text-white/60 mb-2">Your Final Rank</p>
-                        <p className="text-6xl font-bold text-electric-purple mb-4">#{myRank}</p>
-                        <p className="text-3xl font-bold text-neon-cyan">{myPlayer?.score || 0} points</p>
+                    <motion.div animate={{ y: [0, -15, 0] }} transition={{ repeat: Infinity, duration: 3 }}>
+                        <Trophy className="w-24 h-24 text-neon-cyan mx-auto mb-8 drop-shadow-[0_0_30px_rgba(0,242,255,0.5)]" />
+                    </motion.div>
+
+                    <h1 className="text-5xl font-black text-white mb-2 uppercase italic tracking-tighter">
+                        Game <span className="text-gradient">Over</span>
+                    </h1>
+                    <p className="text-white/30 text-xs uppercase tracking-[0.3em] mb-8">Final Results</p>
+
+                    {/* Your Result */}
+                    <div className="glass-dark p-8 rounded-[2rem] border border-white/5 mb-6">
+                        <p className="text-white/40 text-xs font-black uppercase tracking-[0.3em] mb-3">Your Finish</p>
+                        <p className="text-7xl font-black text-white mb-3">
+                            {myRank <= 3 ? podiumLabels[myRank - 1] : `#${myRank}`}
+                        </p>
+                        <p className="text-3xl font-black text-neon-cyan">{myPlayer?.score || 0} pts</p>
                     </div>
-                    <p className="text-white/60 text-lg">Thanks for playing!</p>
+
+                    {/* Top 3 */}
+                    <div className="space-y-2 mb-8">
+                        {sortedPlayers.slice(0, 5).map((player, idx) => (
+                            <div
+                                key={player.id}
+                                className={`flex items-center justify-between p-3 rounded-xl ${player.id === playerId ? 'bg-neon-cyan/10 border border-neon-cyan/20' : 'bg-white/5'
+                                    }`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <span className={`text-lg font-black ${podiumColors[idx] || 'text-white/40'}`}>
+                                        #{idx + 1}
+                                    </span>
+                                    <span className="text-white font-bold text-sm">{player.team_name}</span>
+                                </div>
+                                <span className="text-neon-cyan font-black text-sm">{player.score} pts</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => window.location.reload()}
+                        className="text-white/40 hover:text-white transition-colors text-xs font-black uppercase tracking-[0.3em]"
+                    >
+                        Play Again
+                    </motion.button>
                 </motion.div>
             </div>
         )
@@ -268,7 +463,13 @@ function PlayerInterfaceContent() {
 
 export default function PlayerInterface() {
     return (
-        <Suspense fallback={<div className="min-h-screen bg-obsidian flex items-center justify-center text-white">Loading...</div>}>
+        <Suspense
+            fallback={
+                <div className="min-h-screen bg-obsidian flex items-center justify-center">
+                    <div className="w-12 h-12 border-4 border-white/10 border-t-neon-cyan rounded-full animate-spin" />
+                </div>
+            }
+        >
             <PlayerInterfaceContent />
         </Suspense>
     )

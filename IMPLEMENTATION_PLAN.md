@@ -33,14 +33,19 @@ Build a superior, high-performance interactive quiz platform (**Kwizz.co.uk**) t
 - [x] **Task 3.3:** Supabase Realtime sync.
 
 ### Phase 4: The Next Level (God-Tier Polish)
-- [ ] **Task 4.1:** **Public Deployment:** Deploy to Vercel/Hostinger for real-world use.
-- [ ] **Task 4.2:** **Audio Experience:** Implement SFX (Buzzers, Countdowns, Victory) for that "TV Show" feel.
+- [x] **Task 4.1:** **Public Deployment:** Initial deployment to Hostinger.
+- [ ] **Task 4.2:** **Audio Experience:** Implement SFX (Buzzers, Countdowns, Victory) - *Next Sprint*.
 - [ ] **Task 4.3:** **PWA Transformation:** Add manifest/icons so it installs like a native app.
 - [ ] **Task 4.4:** **Advanced Host Features:** "Nearest Wins" numerics and tie-breakers.
+- [x] **Task 4.5:** **QR Fix:** Resolve 403 Forbidden on QR scan (config & .htaccess).
+- [x] **Task 4.6:** **God-Tier UI:** Implement Noise Texture, Motion-driven UI, and Premium Buttons.
+- [x] **Task 4.7:** **Auth:** Implement Google Sign-In for Admin/Host access.
 
 ## 4. Verification Plan
 1. **Low Latency Test:** Verify buzzer order. (Passed)
-2. **Content Audit:** Verify quiz richness. (Passed - 50 packs)
+2. **Content Audit:** 123 Quiz Packs synced to Production DB. (Passed)
+3. **UI Depth:** Noise texture and premium shadows verified in CSS.
+4. **QR Path Verification:** Ensure `/play/` and `/play` both resolve to the join screen. (Fixed & SFTP Deployed)
 
 ## 5. Rollback Strategy
 - Git reverts & DB snapshots.

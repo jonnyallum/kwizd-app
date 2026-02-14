@@ -32,6 +32,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${outfit.variable} font-display antialiased`}
       >
+        <div className="noise" />
         {children}
       </body>
     </html>
