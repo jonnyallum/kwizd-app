@@ -183,7 +183,7 @@ export default function QuizSelector() {
                     animate={{ opacity: 1, y: 0 }}
                     className="text-center mb-16"
                 >
-                    <h1 className="text-6xl md:text-7xl font-black text-white mb-6 uppercase italic tracking-tighter">
+                    <h1 className="text-4xl sm:text-7xl font-black text-white mb-6 uppercase italic tracking-tighter">
                         Choose Your <span className="text-gradient">Battle</span>
                     </h1>
                     <div className="flex items-center justify-center gap-4">
@@ -204,7 +204,7 @@ export default function QuizSelector() {
                             transition={{ delay: idx * 0.05 }}
                             key={cat}
                             onClick={() => setSelectedCategory(cat)}
-                            className={`px-8 py-3 rounded-full font-black text-sm uppercase tracking-widest transition-all border-2 ${selectedCategory === cat
+                            className={`px-4 py-2 sm:px-8 sm:py-3 rounded-full font-black text-[10px] sm:text-sm uppercase tracking-widest transition-all border-2 ${selectedCategory === cat
                                 ? 'bg-white text-obsidian border-white shadow-[0_0_30px_rgba(255,255,255,0.3)]'
                                 : 'bg-transparent text-white/40 border-white/10 hover:border-white/30 hover:text-white'
                                 }`}
@@ -276,11 +276,11 @@ export default function QuizSelector() {
                                 className="w-full max-w-md glass-dark p-8 rounded-[2.5rem] border-gradient"
                             >
                                 <div className="text-center mb-8">
-                                    <div className="w-20 h-20 bg-electric-purple/10 rounded-3xl mx-auto mb-6 flex items-center justify-center border border-electric-purple/20">
-                                        <Lock className="w-10 h-10 text-electric-purple" />
+                                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-electric-purple/10 rounded-2xl sm:rounded-3xl mx-auto mb-6 flex items-center justify-center border border-electric-purple/20">
+                                        <Lock className="w-8 h-8 sm:w-10 sm:h-10 text-electric-purple" />
                                     </div>
-                                    <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter mb-2">Neural Registry</h2>
-                                    <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em]">Authorized Hosts Only</p>
+                                    <h2 className="text-2xl sm:text-3xl font-black text-white uppercase italic tracking-tighter mb-2">Neural Registry</h2>
+                                    <p className="text-white/40 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.3em]">Authorized Hosts Only</p>
                                 </div>
 
                                 <form onSubmit={handleLogin} className="space-y-6">

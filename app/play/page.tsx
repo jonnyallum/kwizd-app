@@ -157,10 +157,10 @@ function PlayerInterfaceContent() {
                     className="w-full max-w-md relative z-10"
                 >
                     <div className="text-center mb-12">
-                        <h1 className="text-5xl font-black text-white mb-2 uppercase italic tracking-tighter">
+                        <h1 className="text-3xl sm:text-5xl font-black text-white mb-2 uppercase italic tracking-tighter">
                             Join <span className="text-gradient">Quiz</span>
                         </h1>
-                        <p className="text-white/30 text-xs uppercase tracking-[0.3em]">No app needed. Just play.</p>
+                        <p className="text-white/30 text-[10px] sm:text-xs uppercase tracking-[0.3em]">No app needed. Just play.</p>
                         {urlPin && (
                             <div className="inline-block glass-dark px-6 py-2 rounded-full border border-white/10 mt-4">
                                 <p className="text-white/60 text-sm uppercase tracking-widest">
@@ -240,10 +240,10 @@ function PlayerInterfaceContent() {
                         <Trophy className="w-14 h-14 text-white" />
                     </motion.div>
 
-                    <h1 className="text-4xl font-black text-white mb-3 uppercase italic tracking-tighter">
+                    <h1 className="text-3xl sm:text-4xl font-black text-white mb-3 uppercase italic tracking-tighter">
                         You&apos;re In!
                     </h1>
-                    <p className="text-2xl text-neon-cyan font-black mb-2 uppercase tracking-tight">{teamName}</p>
+                    <p className="text-xl sm:text-2xl text-neon-cyan font-black mb-2 uppercase tracking-tight">{teamName}</p>
                     <p className="text-white/20 text-xs font-black uppercase tracking-[0.3em] mb-10">
                         Waiting for host to start...
                     </p>
@@ -366,11 +366,11 @@ function PlayerInterfaceContent() {
                                     whileTap={!isDisabled ? { scale: 0.95 } : undefined}
                                     onClick={() => handleSelectAnswer(option)}
                                     disabled={isDisabled}
-                                    className={`relative rounded-2xl p-5 min-h-[120px] flex flex-col items-center justify-center text-center transition-all ${buttonClass} ${isDisabled ? 'cursor-default' : 'cursor-pointer active:scale-95'
+                                    className={`relative rounded-2xl p-4 sm:p-5 min-h-[100px] sm:min-h-[120px] flex flex-col items-center justify-center text-center transition-all ${buttonClass} ${isDisabled ? 'cursor-default' : 'cursor-pointer active:scale-95'
                                         }`}
                                 >
-                                    <span className="text-white/60 text-xs font-black mb-1">{OPTION_LABELS[idx]}</span>
-                                    <span className="text-white font-bold text-base leading-tight">{option}</span>
+                                    <span className="text-white/60 text-[10px] sm:text-xs font-black mb-1">{OPTION_LABELS[idx]}</span>
+                                    <span className="text-white font-bold text-sm sm:text-base leading-tight">{option}</span>
                                     {isCorrectAnswer && (
                                         <motion.div
                                             initial={{ scale: 0 }}
@@ -422,25 +422,25 @@ function PlayerInterfaceContent() {
                         <Trophy className="w-24 h-24 text-neon-cyan relative z-10 drop-shadow-[0_0_30px_rgba(0,242,255,0.5)]" />
                     </motion.div>
 
-                    <h1 className="text-5xl font-black text-white mb-2 uppercase italic tracking-tighter">
+                    <h1 className="text-4xl sm:text-5xl font-black text-white mb-2 uppercase italic tracking-tighter">
                         Game <span className="text-gradient">Over</span>
                     </h1>
-                    <p className="text-white/30 text-xs uppercase tracking-[0.3em] mb-8">Neural Session Terminated</p>
+                    <p className="text-white/30 text-[10px] sm:text-xs uppercase tracking-[0.3em] mb-8">Neural Session Terminated</p>
 
                     {/* Your Result */}
                     <motion.div
                         initial={{ y: 20, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         transition={{ delay: 0.2 }}
-                        className="glass-dark p-8 rounded-[2.5rem] border-gradient mb-8 relative group overflow-hidden"
+                        className="glass-dark p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border-gradient mb-8 relative group overflow-hidden"
                     >
                         <div className="absolute inset-0 bg-gradient-to-br from-electric-purple/5 to-neon-cyan/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em] mb-4">Your Final Rank</p>
-                        <p className="text-8xl font-black text-white mb-4 tracking-tighter italic">
+                        <p className="text-white/40 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.3em] mb-4">Your Final Rank</p>
+                        <p className="text-6xl sm:text-8xl font-black text-white mb-4 tracking-tighter italic">
                             {myRank <= 3 ? podiumLabels[myRank - 1] : `#${myRank}`}
                         </p>
-                        <p className="text-4xl font-black text-gradient">
-                            {myPlayer?.score.toLocaleString() || 0} <span className="text-sm italic uppercase ml-1">pts</span>
+                        <p className="text-3xl sm:text-4xl font-black text-gradient">
+                            {myPlayer?.score.toLocaleString() || 0} <span className="text-xs sm:text-sm italic uppercase ml-1">pts</span>
                         </p>
                     </motion.div>
 
@@ -453,8 +453,8 @@ function PlayerInterfaceContent() {
                                 animate={{ x: 0, opacity: 1 }}
                                 transition={{ delay: 0.4 + (idx * 0.1) }}
                                 className={`flex items-center justify-between p-4 rounded-2xl transition-all ${player.id === playerId
-                                        ? 'bg-neon-cyan/20 border-2 border-neon-cyan/30 shadow-[0_0_20px_rgba(0,242,255,0.1)]'
-                                        : 'bg-white/5 border border-white/5 opacity-80'
+                                    ? 'bg-neon-cyan/20 border-2 border-neon-cyan/30 shadow-[0_0_20px_rgba(0,242,255,0.1)]'
+                                    : 'bg-white/5 border border-white/5 opacity-80'
                                     }`}
                             >
                                 <div className="flex items-center gap-4">

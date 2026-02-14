@@ -164,14 +164,14 @@ function HostDashboardContent() {
                         animate={{ opacity: 1, scale: 1 }}
                         className="text-center mb-16"
                     >
-                        <h1 className="text-8xl font-black text-white mb-6 tracking-tighter italic uppercase">
+                        <h1 className="text-5xl sm:text-8xl font-black text-white mb-6 tracking-tighter italic uppercase">
                             The <span className="text-gradient">Lobby</span>
                         </h1>
                         <div className="inline-block relative">
                             <div className="absolute inset-0 bg-gradient-to-r from-electric-purple to-neon-cyan blur-2xl opacity-20" />
-                            <div className="relative glass-dark px-16 py-10 rounded-[2.5rem] border-gradient">
-                                <p className="text-white/40 text-xs font-black uppercase tracking-[0.4em] mb-4">Frequency PIN</p>
-                                <p className="text-9xl font-black text-white tracking-[0.2em]">{pin}</p>
+                            <div className="relative glass-dark px-8 sm:px-16 py-6 sm:py-10 rounded-2xl sm:rounded-[2.5rem] border-gradient">
+                                <p className="text-white/40 text-[10px] sm:text-xs font-black uppercase tracking-[0.4em] mb-4">Frequency PIN</p>
+                                <p className="text-6xl sm:text-9xl font-black text-white tracking-[0.2em]">{pin}</p>
                             </div>
                         </div>
                     </motion.div>
@@ -198,11 +198,11 @@ function HostDashboardContent() {
                             transition={{ delay: 0.2 }}
                             className="glass-dark p-12 rounded-[3rem] border-gradient"
                         >
-                            <div className="flex items-center gap-6 mb-8">
-                                <Users className="w-10 h-10 text-neon-cyan" />
-                                <h3 className="text-2xl font-black text-white uppercase tracking-widest">Active Nodes</h3>
+                            <div className="flex items-center gap-4 sm:gap-6 mb-8">
+                                <Users className="w-8 h-8 sm:w-10 sm:h-10 text-neon-cyan" />
+                                <h3 className="text-xl sm:text-2xl font-black text-white uppercase tracking-widest">Active Nodes</h3>
                             </div>
-                            <p className="text-9xl font-black text-gradient mb-8">{players.length}</p>
+                            <p className="text-7xl sm:text-9xl font-black text-gradient mb-8">{players.length}</p>
                             <div className="grid grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-4 scrollbar-hide">
                                 <AnimatePresence>
                                     {players.map((player) => (
@@ -351,8 +351,8 @@ function HostDashboardContent() {
                         animate={{ y: 0, opacity: 1 }}
                         className="mb-16"
                     >
-                        <Trophy className="w-24 h-24 text-yellow-500 mx-auto mb-6 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)]" />
-                        <h1 className="text-7xl font-black text-white uppercase italic tracking-tighter">
+                        <Trophy className="w-16 h-16 sm:w-24 sm:h-24 text-yellow-500 mx-auto mb-6 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)]" />
+                        <h1 className="text-4xl sm:text-7xl font-black text-white uppercase italic tracking-tighter">
                             Final <span className="text-gradient">Standings</span>
                         </h1>
                     </motion.div>
@@ -369,17 +369,17 @@ function HostDashboardContent() {
                                         }`}
                                 >
                                     <div className="flex items-center gap-8">
-                                        <span className={`text-5xl font-black italic tracking-tighter ${idx < 3 ? podiumText[idx] : 'text-white/20'}`}>
+                                        <span className={`text-3xl sm:text-5xl font-black italic tracking-tighter ${idx < 3 ? podiumText[idx] : 'text-white/20'}`}>
                                             #{idx + 1}
                                         </span>
                                         <div className="text-left">
-                                            <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em]">Neural Node</p>
-                                            <p className="text-3xl font-black text-white uppercase italic tracking-tight">{player.team_name}</p>
+                                            <p className="text-white/40 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.3em]">Neural Node</p>
+                                            <p className="text-xl sm:text-3xl font-black text-white uppercase italic tracking-tight">{player.team_name}</p>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em]">Accumulated Intel</p>
-                                        <p className={`text-4xl font-black ${idx === 0 ? 'text-neon-cyan drop-shadow-[0_0_10px_rgba(0,242,255,0.5)]' : 'text-white'}`}>
+                                        <p className="text-white/40 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.3em]">Accumulated Intel</p>
+                                        <p className={`text-2xl sm:text-4xl font-black ${idx === 0 ? 'text-neon-cyan drop-shadow-[0_0_10px_rgba(0,242,255,0.5)]' : 'text-white'}`}>
                                             {player.score.toLocaleString()} <span className="text-xs uppercase italic ml-1">pts</span>
                                         </p>
                                     </div>
