@@ -23,6 +23,40 @@ Build a superior, high-performance interactive quiz platform (**Kwizz.co.uk**) t
 - [x] **Task 1.2:** Implement Design System (Obsidian, Electric Purple, Neon Cyan).
 - [x] **Task 1.3:** Setup Supabase schema for Quizzes, Questions, Games, Players.
 
+# Kwizz Production: Auth Redirect Fix (@Sentinel)
+
+The Google login flow is reportedly falling back to `localhost`. Since the source code uses `window.location.origin`, the issue is likely missing configuration in the Supabase Dashboard or Google Cloud Console.
+
+## Proposed Changes
+
+### [Component] Login Logic (`app/login/page.tsx`)
+- **Robust Redirects**: Introduce logic to handle both `NEXT_PUBLIC_SITE_URL` and `window.location.origin` for more explicit production control.
+- **Failback Logic**: Add a helper function to ensure the redirect URL always defaults to production in non-local environments.
+
+### [Config] Environment Variables (`.env.local`)
+- Add `NEXT_PUBLIC_SITE_URL=https://kwizz.co.uk` (or the correct production domain).
+
+## User Action Required (CRITICAL)
+
+> [!IMPORTANT]
+> **Supabase Dashboard Settings**
+> 1. Go to **Authentication** -> **URL Configuration**.
+> 2. Ensure **Site URL** is set to `https://kwizz.co.uk`.
+> 3. Add `https://kwizz.co.uk/**` to the **Redirect URLs** (Allow-list).
+
+> [!WARNING]
+> **Google Cloud Console Settings**
+> 1. Go to **APIs & Services** -> **Credentials**.
+> 2. Find your "OAuth 2.0 Client ID" for the web application.
+> 3. Ensure **Authorized redirect URIs** includes:
+>    - `https://japkqygktnubcrmlttqt.supabase.co/auth/v1/callback` (Replace with your actual Supabase URL if different).
+
+## Verification Plan
+### Manual Verification
+- Deploy changes to production.
+- Attempt Google Login on the live site.
+- Inspect the redirected URL to Google and confirm the `redirect_uri` parameter is correct.
+
 ### Phase 2: The Quiz Engine (P0)
 - [x] **Task 2.1:** Create `execution/generate_kwizz_packs.py`.
 - [x] **Task 2.2:** Bulk generate and import initial quiz packs (50 packs / 500 questions synced).
