@@ -142,7 +142,8 @@ function PlayerInterfaceContent() {
 
     const myPlayer = players.find((p) => p.id === playerId)
     const sortedPlayers = [...players].sort((a, b) => b.score - a.score)
-    const myRank = sortedPlayers.findIndex((p) => p.id === playerId) + 1
+    const myIndex = sortedPlayers.findIndex((p) => p.id === playerId)
+    const myRank = myIndex !== -1 ? myIndex + 1 : null
 
     // ─── JOIN SCREEN ───
     if (!gameId) {
@@ -344,6 +345,18 @@ function PlayerInterfaceContent() {
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+                {/* Question Text Restoration */}
+                <div className="px-6 py-8 relative z-10 text-center">
+                    <motion.h2
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        key={currentQuestion.id}
+                        className="text-xl sm:text-2xl font-bold text-white leading-tight"
+                    >
+                        {currentQuestion.text}
+                    </motion.h2>
+                </div>
 
                 {/* Answer Options Grid */}
                 <div className="flex-1 flex items-center justify-center p-4 relative z-10">

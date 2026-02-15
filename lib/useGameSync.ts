@@ -95,7 +95,11 @@ export function useGameSync(gameId: string | null) {
                         { event: '*', schema: 'public', table: 'players', filter: `game_id=eq.${gameId}` },
                         (payload) => {
                             if (payload.eventType === 'INSERT') {
-                                setPlayers((prev) => [...prev, payload.new as Player])
+                                setPlayers((prev) => {
+                                    const exists = prev.some(p => p.id === payload.new.id)
+                                    if (exists) return prev
+                                    return [...prev, payload.new as Player]
+                                })
                             } else if (payload.eventType === 'UPDATE') {
                                 setPlayers((prev) =>
                                     prev.map((p) => (p.id === payload.new.id ? (payload.new as Player) : p))

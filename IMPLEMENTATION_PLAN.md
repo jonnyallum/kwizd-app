@@ -23,39 +23,30 @@ Build a superior, high-performance interactive quiz platform (**Kwizz.co.uk**) t
 - [x] **Task 1.2:** Implement Design System (Obsidian, Electric Purple, Neon Cyan).
 - [x] **Task 1.3:** Setup Supabase schema for Quizzes, Questions, Games, Players.
 
-# Kwizz Production: Auth Redirect Fix (@Sentinel)
+# Kwizz: Neural Core Recovery Plan (@Sentinel)
 
-The Google login flow is reportedly falling back to `localhost`. Since the source code uses `window.location.origin`, the issue is likely missing configuration in the Supabase Dashboard or Google Cloud Console.
+Critical production bugs identified: duplicate joins, missing question text on player devices, and runtime crashes ("blackout").
 
 ## Proposed Changes
 
-### [Component] Login Logic (`app/login/page.tsx`)
-- **Robust Redirects**: Introduce logic to handle both `NEXT_PUBLIC_SITE_URL` and `window.location.origin` for more explicit production control.
-- **Failback Logic**: Add a helper function to ensure the redirect URL always defaults to production in non-local environments.
+### [Sync Core] Realtime Deduplication (`lib/useGameSync.ts`)
+- **State Protection**: Update `setPlayers` to always deduplicate incoming `INSERT` events by ID.
+- **Session Continuity**: Implement local storage check in `joinGame` to prevent redundant record creation on refresh/re-join.
 
-### [Config] Environment Variables (`.env.local`)
-- Add `NEXT_PUBLIC_SITE_URL=https://kwizz.co.uk` (or the correct production domain).
+### [Player UI] Restoration of Question Text (`app/play/page.tsx`)
+- **Missing Link**: Inject `<h2>{currentQuestion.text}</h2>` into the `Active Game` state.
+- **Safety Gates**: Add error guards to the `AnimatePresence` result feedback to prevent component unmounting on null players.
 
-## User Action Required (CRITICAL)
-
-> [!IMPORTANT]
-> **Supabase Dashboard Settings**
-> 1. Go to **Authentication** -> **URL Configuration**.
-> 2. Ensure **Site URL** is set to `https://kwizz.co.uk`.
-> 3. Add `https://kwizz.co.uk/**` to the **Redirect URLs** (Allow-list).
-
-> [!WARNING]
-> **Google Cloud Console Settings**
-> 1. Go to **APIs & Services** -> **Credentials**.
-> 2. Find your "OAuth 2.0 Client ID" for the web application.
-> 3. Ensure **Authorized redirect URIs** includes:
->    - `https://japkqygktnubcrmlttqt.supabase.co/auth/v1/callback` (Replace with your actual Supabase URL if different).
+### [Host UI] Response Hardening (`app/host/page.tsx`)
+- **Leaderboard Resilience**: Ensure response sorting and player lookups handle `undefined` results gracefully without crashing the dashboard.
+- **Lobby Management**: Implement a cleanup trigger to remove "ghost" nodes if multiple IDs exist for the same team name.
 
 ## Verification Plan
-### Manual Verification
-- Deploy changes to production.
-- Attempt Google Login on the live site.
-- Inspect the redirected URL to Google and confirm the `redirect_uri` parameter is correct.
+### Simulation Verification
+- Run `execution/simulate_monetization.py` with expanded tests for:
+  - Concurrent joins with the same team name.
+  - Question advancement with rapid response submission.
+- Manual verification of question text visibility on mobile devices.
 
 ### Phase 2: The Quiz Engine (P0)
 - [x] **Task 2.1:** Create `execution/generate_kwizz_packs.py`.

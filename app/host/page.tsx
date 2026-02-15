@@ -291,11 +291,12 @@ function HostDashboardContent() {
                         <div className="space-y-2">
                             {sortedResponses.slice(0, 5).map((response, idx) => {
                                 const player = players.find(p => p.id === response.player_id)
+                                if (!player) return null
                                 return (
                                     <div key={response.id} className="flex items-center justify-between bg-white/5 px-6 py-4 rounded-lg">
                                         <div className="flex items-center gap-4">
                                             <span className="text-2xl font-bold text-electric-purple">#{idx + 1}</span>
-                                            <span className="text-white font-medium">{player?.team_name}</span>
+                                            <span className="text-white font-medium">{player.team_name}</span>
                                         </div>
                                         <span className="text-neon-cyan font-mono">{response.speed_ms}ms</span>
                                     </div>
