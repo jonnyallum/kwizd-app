@@ -450,7 +450,7 @@ function PlayerInterfaceContent() {
                         <div className="absolute inset-0 bg-gradient-to-br from-electric-purple/5 to-neon-cyan/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                         <p className="text-white/40 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.3em] mb-4">Your Final Rank</p>
                         <p className="text-6xl sm:text-8xl font-black text-white mb-4 tracking-tighter italic">
-                            {myRank <= 3 ? podiumLabels[myRank - 1] : `#${myRank}`}
+                            {myRank !== null ? (myRank <= 3 ? podiumLabels[myRank - 1] : `#${myRank}`) : '—'}
                         </p>
                         <p className="text-3xl sm:text-4xl font-black text-gradient">
                             {myPlayer?.score.toLocaleString() || 0} <span className="text-xs sm:text-sm italic uppercase ml-1">pts</span>
