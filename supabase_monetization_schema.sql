@@ -223,12 +223,17 @@ CREATE INDEX IF NOT EXISTS idx_corporate_bookings_status ON corporate_bookings(s
 -- RLS POLICIES (Row Level Security)
 -- ============================================================
 
--- Hosts: users can only see/edit their own host record
+-- Hosts: users can only see/edit their own host record (Protects Emails)
 ALTER TABLE hosts ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Hosts can view own record" ON hosts
   FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Hosts can update own record" ON hosts
   FOR UPDATE USING (auth.uid() = user_id);
+
+-- Prevent unauthorized email discovery via joining
+ALTER TABLE games ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Anyone can view games" ON games
+  FOR SELECT USING (true);
 
 -- Host Credits: users can only see their own credits
 ALTER TABLE host_credits ENABLE ROW LEVEL SECURITY;

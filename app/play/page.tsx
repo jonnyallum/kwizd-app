@@ -4,14 +4,16 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { joinGame, useGameSync, submitAnswer } from '@/lib/useGameSync'
 import { supabase } from '@/lib/supabase'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Trophy, Check, X, ChevronUp } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Trophy, Check, X, ChevronUp, Zap } from 'lucide-react'
+import { QuestionRenderer, type QuestionType } from '@/components/QuestionRenderer'
 
 interface Question {
     id: string
     text: string
     options: string[]
     answer: string
+    type?: QuestionType
 }
 
 const OPTION_COLORS = [
@@ -99,14 +101,30 @@ function PlayerInterfaceContent() {
         return () => clearInterval(interval)
     }, [game?.current_question_id, game?.question_started_at, selectedAnswer, game?.status])
 
+    // Persistence: Check for existing session
+    useEffect(() => {
+        const savedSession = localStorage.getItem(`kwizz_session_${activePin}`)
+        if (savedSession) {
+            try {
+                const { gId, pId, team } = JSON.parse(savedSession)
+                setGameId(gId)
+                setPlayerId(pId)
+                setTeamName(team)
+            } catch (e) {
+                localStorage.removeItem(`kwizz_session_${activePin}`)
+            }
+        }
+    }, [activePin])
+
     async function handleJoin(e: React.FormEvent) {
         e.preventDefault()
-        if (!activePin || !teamName.trim()) return
+        if (!activePin || !teamName.trim() || joining) return
 
         setJoining(true)
         setJoinError(null)
         try {
             const { gameId: gId, playerId: pId } = await joinGame(activePin, teamName.trim())
+            localStorage.setItem(`kwizz_session_${activePin}`, JSON.stringify({ gId, pId, team: teamName.trim() }))
             setGameId(gId)
             setPlayerId(pId)
         } catch (error) {
@@ -358,54 +376,17 @@ function PlayerInterfaceContent() {
                     </motion.h2>
                 </div>
 
-                {/* Answer Options Grid */}
+                {/* Question Input Zone */}
                 <div className="flex-1 flex items-center justify-center p-4 relative z-10">
-                    <div className="grid grid-cols-2 gap-3 w-full max-w-lg">
-                        {currentQuestion.options.map((option, idx) => {
-                            const color = OPTION_COLORS[idx] || OPTION_COLORS[0]
-                            const isSelected = selectedAnswer === option
-                            const isCorrectAnswer = answerResult && option === currentQuestion.answer
-                            const isWrongSelection = answerResult && isSelected && !answerResult.isCorrect
-                            const isDisabled = !!selectedAnswer || submitting
-
-                            let buttonClass = `${color.bg} ${color.hover}`
-                            if (isCorrectAnswer) buttonClass = 'bg-green-500 ring-4 ring-green-300'
-                            else if (isWrongSelection) buttonClass = 'bg-red-500/50 ring-4 ring-red-400'
-                            else if (answerResult && !isSelected) buttonClass = 'bg-white/5 opacity-40'
-
-                            return (
-                                <motion.button
-                                    key={idx}
-                                    whileTap={!isDisabled ? { scale: 0.95 } : undefined}
-                                    onClick={() => handleSelectAnswer(option)}
-                                    disabled={isDisabled}
-                                    className={`relative rounded-2xl p-4 sm:p-5 min-h-[100px] sm:min-h-[120px] flex flex-col items-center justify-center text-center transition-all ${buttonClass} ${isDisabled ? 'cursor-default' : 'cursor-pointer active:scale-95'
-                                        }`}
-                                >
-                                    <span className="text-white/60 text-[10px] sm:text-xs font-black mb-1">{OPTION_LABELS[idx]}</span>
-                                    <span className="text-white font-bold text-sm sm:text-base leading-tight">{option}</span>
-                                    {isCorrectAnswer && (
-                                        <motion.div
-                                            initial={{ scale: 0 }}
-                                            animate={{ scale: 1 }}
-                                            className="absolute top-2 right-2"
-                                        >
-                                            <Check className="w-6 h-6 text-white" />
-                                        </motion.div>
-                                    )}
-                                    {isWrongSelection && (
-                                        <motion.div
-                                            initial={{ scale: 0 }}
-                                            animate={{ scale: 1 }}
-                                            className="absolute top-2 right-2"
-                                        >
-                                            <X className="w-6 h-6 text-white" />
-                                        </motion.div>
-                                    )}
-                                </motion.button>
-                            )
-                        })}
-                    </div>
+                    <QuestionRenderer
+                        type={(currentQuestion.type as QuestionType) || 'multiple_choice'}
+                        options={currentQuestion.options || []}
+                        answer={currentQuestion.answer}
+                        onSelect={handleSelectAnswer}
+                        disabled={!!selectedAnswer || submitting}
+                        selectedAnswer={selectedAnswer}
+                        isCorrect={answerResult?.isCorrect}
+                    />
                 </div>
             </div>
         )

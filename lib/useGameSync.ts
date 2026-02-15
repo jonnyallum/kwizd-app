@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import { Telemetry } from './telemetry'
 
 export interface Game {
     id: string
@@ -49,11 +50,17 @@ export function useGameSync(gameId: string | null) {
             return
         }
 
-        let channel: RealtimeChannel
+        let channel: RealtimeChannel | null = null
         let retryCount = 0
+        let isActive = true
         const maxRetries = 3
 
         const setupRealtimeSubscription = async () => {
+            if (!isActive) return
+
+            Telemetry.log('INFO', `Initializing Realtime for Game: ${gameId}`)
+            const startTime = performance.now()
+
             try {
                 if (retryCount > 0) setConnectionStatus('reconnecting')
 
@@ -64,7 +71,7 @@ export function useGameSync(gameId: string | null) {
                     .single()
 
                 if (gameError) throw gameError
-                setGame(gameData)
+                if (isActive) setGame(gameData)
 
                 const { data: playersData, error: playersError } = await supabase
                     .from('players')
@@ -73,27 +80,30 @@ export function useGameSync(gameId: string | null) {
                     .order('score', { ascending: false })
 
                 if (playersError) throw playersError
-                setPlayers(playersData || [])
+                if (isActive) setPlayers(playersData || [])
 
                 const { data: responsesData, error: responsesError } = await supabase
                     .from('responses')
                     .select('*')
                     .eq('game_id', gameId)
 
-                if (!responsesError) setResponses(responsesData || [])
+                if (!responsesError && isActive) setResponses(responsesData || [])
+
+                if (!isActive) return
 
                 channel = supabase.channel(`game:${gameId}`)
                     .on(
                         'postgres_changes',
                         { event: '*', schema: 'public', table: 'games', filter: `id=eq.${gameId}` },
                         (payload) => {
-                            if (payload.eventType === 'UPDATE') setGame(payload.new as Game)
+                            if (payload.eventType === 'UPDATE' && isActive) setGame(payload.new as Game)
                         }
                     )
                     .on(
                         'postgres_changes',
                         { event: '*', schema: 'public', table: 'players', filter: `game_id=eq.${gameId}` },
                         (payload) => {
+                            if (!isActive) return
                             if (payload.eventType === 'INSERT') {
                                 setPlayers((prev) => {
                                     const exists = prev.some(p => p.id === payload.new.id)
@@ -113,27 +123,42 @@ export function useGameSync(gameId: string | null) {
                         'postgres_changes',
                         { event: 'INSERT', schema: 'public', table: 'responses', filter: `game_id=eq.${gameId}` },
                         (payload) => {
-                            setResponses((prev) => [...prev, payload.new as Response])
+                            if (!isActive) return
+                            setResponses((prev) => {
+                                const exists = prev.some(r => r.id === payload.new.id)
+                                if (exists) return prev
+                                return [...prev, payload.new as Response]
+                            })
                         }
                     )
                     .subscribe((status) => {
+                        if (!isActive) return
                         if (status === 'SUBSCRIBED') {
                             setConnectionStatus('connected')
+                            Telemetry.trackMetric(
+                                'sync_latency',
+                                Math.round(performance.now() - startTime),
+                                'ms'
+                            )
+                            Telemetry.log('INFO', 'Realtime Subscribed Successfully')
                         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
                             setConnectionStatus('error')
+                            Telemetry.log('ERROR', 'Realtime Connection Failed', { status })
                         }
                     })
 
-                setLoading(false)
-                setConnectionStatus('connected')
+                if (isActive) {
+                    setLoading(false)
+                }
             } catch (err) {
+                Telemetry.log('CRITICAL', 'Realtime Subscription Exception', { error: err })
                 console.error(`[Kwizz] Sync error (Attempt ${retryCount + 1}/${maxRetries}):`, err)
 
-                if (retryCount < maxRetries) {
+                if (isActive && retryCount < maxRetries) {
                     retryCount++
-                    const delay = Math.pow(2, retryCount) * 1000 // Exponential backoff
+                    const delay = Math.pow(2, retryCount) * 1000
                     setTimeout(setupRealtimeSubscription, delay)
-                } else {
+                } else if (isActive) {
                     setError(err instanceof Error ? err.message : 'Failed to load game')
                     setLoading(false)
                     setConnectionStatus('error')
@@ -143,13 +168,12 @@ export function useGameSync(gameId: string | null) {
 
         setupRealtimeSubscription()
 
-        // Polling fallback every 2s - Only active if we aren't connected via Realtime
         const pollInterval = setInterval(async () => {
-            if (!gameId || connectionStatus === 'connected') return
+            if (!gameId || connectionStatus === 'connected' || !isActive) return
             try {
                 const { data: gameData } = await supabase
                     .from('games').select('*').eq('id', gameId).single()
-                if (gameData) {
+                if (gameData && isActive) {
                     setGame(prev => {
                         if (!prev || prev.status !== gameData.status || prev.current_question_id !== gameData.current_question_id) {
                             return gameData
@@ -160,7 +184,7 @@ export function useGameSync(gameId: string | null) {
 
                 const { data: playersData } = await supabase
                     .from('players').select('*').eq('game_id', gameId).order('score', { ascending: false })
-                if (playersData) {
+                if (playersData && isActive) {
                     setPlayers(prev => {
                         if (prev.length !== playersData.length) return playersData
                         const changed = prev.some((p, i) => p.score !== playersData[i]?.score || p.id !== playersData[i]?.id)
@@ -170,7 +194,7 @@ export function useGameSync(gameId: string | null) {
 
                 const { data: responsesData } = await supabase
                     .from('responses').select('*').eq('game_id', gameId)
-                if (responsesData) {
+                if (responsesData && isActive) {
                     setResponses(prev => prev.length !== responsesData.length ? responsesData : prev)
                 }
             } catch {
@@ -179,10 +203,11 @@ export function useGameSync(gameId: string | null) {
         }, 3000)
 
         return () => {
+            isActive = false
             clearInterval(pollInterval)
             if (channel) supabase.removeChannel(channel)
         }
-    }, [gameId, connectionStatus])
+    }, [gameId])
 
     return { game, setGame, players, setPlayers, responses, setResponses, loading, error, connectionStatus }
 }
@@ -314,20 +339,41 @@ export async function submitAnswer(
     answer: string,
     speedMs: number
 ): Promise<{ isCorrect: boolean; pointsEarned: number }> {
-    // First check the correct answer
+    // 1. Fetch question details including type
     const { data: question, error: qError } = await supabase
         .from('questions')
-        .select('answer')
+        .select('answer, type')
         .eq('id', questionId)
         .single()
 
     if (qError) throw qError
 
-    const isCorrect = question.answer === answer
-    // Points: 1000 base for correct, minus speed penalty (1 point per 10ms, min 100)
-    const pointsEarned = isCorrect ? Math.max(100, 1000 - Math.floor(speedMs / 10)) : 0
+    let isCorrect = false
+    let pointsEarned = 0
 
-    // Insert response
+    // 2. Determine correctness based on type
+    if (question.type === 'buzzin') {
+        const { count } = await supabase.from('responses').select('*', { count: 'exact', head: true })
+            .eq('question_id', questionId).eq('answer', 'BUZZ')
+
+        if (count && count > 0) return { isCorrect: false, pointsEarned: 0 }
+
+        isCorrect = answer === 'BUZZ'
+        pointsEarned = 500
+    } else if (question.type === 'numeral') {
+        const userNum = parseFloat(answer)
+        const targetNum = parseFloat(question.answer)
+        isCorrect = userNum === targetNum
+    } else {
+        isCorrect = question.answer.toLowerCase() === answer.toLowerCase()
+    }
+
+    // 3. Points calculation: 1000 base for correct (non-buzzin), minus speed penalty
+    if (isCorrect && question.type !== 'buzzin') {
+        pointsEarned = Math.max(100, 1000 - Math.floor(speedMs / 10))
+    }
+
+    // 4. Insert response
     const { error: rError } = await supabase.from('responses').insert({
         game_id: gameId,
         player_id: playerId,
@@ -339,7 +385,7 @@ export async function submitAnswer(
 
     if (rError) throw rError
 
-    // Update player score
+    // 5. Update player score
     if (isCorrect) {
         const { data: player } = await supabase
             .from('players')
